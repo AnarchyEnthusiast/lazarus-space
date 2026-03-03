@@ -1,6 +1,6 @@
 -- Lazarus Space: Portal growth, teleportation, and warp device interaction
 
-local PORTAL_GROWTH_INTERVAL = 0.08 -- seconds between growth ticks
+local PORTAL_GROWTH_INTERVAL = 0.104 -- seconds between growth ticks
 local PORTAL_TELEPORT_RANGE = 10000
 local PORTAL_Y_MIN = 85
 local PORTAL_Y_MAX = 120
