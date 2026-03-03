@@ -7,7 +7,7 @@ local PORTAL_Y_MAX = 120
 local PORTAL_Y_SCAN = 5 -- vertical scan range for terrain following
 local WARP_CHARGE_TIME = 3.0 -- seconds for warp device glow charge
 local WARP_GLOW_STAGES = 4 -- number of glow brightness levels
-local PORTAL_ACTIVATE_DELAY = 5.0 -- seconds after coating before teleport
+local PORTAL_ACTIVATE_DELAY = 2.0 -- seconds after coating before teleport
 
 --- Find the ground surface Y at a given X/Z, searching within
 --- scan_range blocks above and below ref_y. Returns the Y
@@ -43,19 +43,23 @@ end
 --- node name if valid, nil if not.
 local function select_portal_variant(pos)
 	local node = minetest.get_node(pos)
-	if node.name == "ignore" then return nil end
-	if lazarus_space.is_portal(node.name) then return nil end
-	if lazarus_space.is_disrupted_space(node.name) then return nil end
-	local def = minetest.registered_nodes[node.name]
-	if def and def.walkable then return nil end
+	if node.name ~= "air" then return nil end
 
-	-- Check all 6 neighbors for solid faces.
+	-- Check all 6 neighbors for solid surfaces.
+	-- Inclusive check: anything that is not air, not ignore,
+	-- not a portal variant, and not a liquid counts as solid.
+	-- This covers leaves, fences, glass, and all other blocks.
 	local solid_faces = {}
 	for _, fd in ipairs(lazarus_space.FACE_DIRS) do
 		local np = vector.add(pos, fd)
 		local nnode = minetest.get_node(np)
 		local ndef = minetest.registered_nodes[nnode.name]
-		if ndef and ndef.walkable then
+		local is_liquid = ndef and ndef.liquidtype
+			and ndef.liquidtype ~= "none"
+		if nnode.name ~= "air"
+				and nnode.name ~= "ignore"
+				and not lazarus_space.is_portal(nnode.name)
+				and not is_liquid then
 			solid_faces[#solid_faces + 1] = fd.face
 		end
 	end
@@ -64,49 +68,8 @@ local function select_portal_variant(pos)
 
 	-- Sort for canonical lookup key.
 	table.sort(solid_faces)
-
-	-- Try the full face set first.
 	local key = table.concat(solid_faces, "+")
-	if lazarus_space.PORTAL_LOOKUP[key] then
-		return lazarus_space.PORTAL_LOOKUP[key]
-	end
-
-	-- Full key should always match (1-6 face variants
-	-- all registered). Fallback to smaller subsets just
-	-- in case.
-	if #solid_faces >= 3 then
-		for i = 1, #solid_faces do
-			for j = i + 1, #solid_faces do
-				for k = j + 1, #solid_faces do
-					local sk = solid_faces[i]
-						.. "+" .. solid_faces[j]
-						.. "+" .. solid_faces[k]
-					if lazarus_space.PORTAL_LOOKUP[sk]
-							then
-						return lazarus_space
-							.PORTAL_LOOKUP[sk]
-					end
-				end
-			end
-		end
-	end
-
-	if #solid_faces >= 2 then
-		for i = 1, #solid_faces do
-			for j = i + 1, #solid_faces do
-				local sk = solid_faces[i]
-					.. "+" .. solid_faces[j]
-				if lazarus_space.PORTAL_LOOKUP[sk]
-						then
-					return lazarus_space
-						.PORTAL_LOOKUP[sk]
-				end
-			end
-		end
-	end
-
-	-- Fall back to single flat face.
-	return lazarus_space.PORTAL_LOOKUP[solid_faces[1]]
+	return lazarus_space.PORTAL_LOOKUP[key]
 end
 
 -- ============================================================

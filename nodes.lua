@@ -200,7 +200,7 @@ minetest.register_node("lazarus_space:lazarus_portal", {
 })
 
 -- ============================================================
--- PORTAL SURFACE COATING VARIANTS (26 variants)
+-- PORTAL SURFACE COATING VARIANTS (63 variants)
 -- ============================================================
 
 -- Thin slab thickness (1/16 of a block).
@@ -227,95 +227,11 @@ lazarus_space.FACE_DIRS = {
 	{x = 0, y = 0, z = -1, face = "wall_s"},
 }
 
--- All 26 portal variants: 6 flat + 12 edge + 8 corner.
-local PORTAL_VARIANTS = {
-	-- 6 flat face variants
-	{name = "portal_floor", faces = {"floor"}},
-	{name = "portal_ceiling", faces = {"ceiling"}},
-	{name = "portal_wall_n", faces = {"wall_n"}},
-	{name = "portal_wall_s", faces = {"wall_s"}},
-	{name = "portal_wall_e", faces = {"wall_e"}},
-	{name = "portal_wall_w", faces = {"wall_w"}},
-	-- 12 edge variants (L-shaped, two perpendicular slabs)
-	{name = "portal_edge_floor_n", faces = {"floor", "wall_n"}},
-	{name = "portal_edge_floor_s", faces = {"floor", "wall_s"}},
-	{name = "portal_edge_floor_e", faces = {"floor", "wall_e"}},
-	{name = "portal_edge_floor_w", faces = {"floor", "wall_w"}},
-	{name = "portal_edge_ceiling_n",
-		faces = {"ceiling", "wall_n"}},
-	{name = "portal_edge_ceiling_s",
-		faces = {"ceiling", "wall_s"}},
-	{name = "portal_edge_ceiling_e",
-		faces = {"ceiling", "wall_e"}},
-	{name = "portal_edge_ceiling_w",
-		faces = {"ceiling", "wall_w"}},
-	{name = "portal_edge_n_e", faces = {"wall_n", "wall_e"}},
-	{name = "portal_edge_n_w", faces = {"wall_n", "wall_w"}},
-	{name = "portal_edge_s_e", faces = {"wall_s", "wall_e"}},
-	{name = "portal_edge_s_w", faces = {"wall_s", "wall_w"}},
-	-- 8 inside corner variants (three-sided)
-	{name = "portal_corner_floor_n_e",
-		faces = {"floor", "wall_n", "wall_e"}},
-	{name = "portal_corner_floor_n_w",
-		faces = {"floor", "wall_n", "wall_w"}},
-	{name = "portal_corner_floor_s_e",
-		faces = {"floor", "wall_s", "wall_e"}},
-	{name = "portal_corner_floor_s_w",
-		faces = {"floor", "wall_s", "wall_w"}},
-	{name = "portal_corner_ceiling_n_e",
-		faces = {"ceiling", "wall_n", "wall_e"}},
-	{name = "portal_corner_ceiling_n_w",
-		faces = {"ceiling", "wall_n", "wall_w"}},
-	{name = "portal_corner_ceiling_s_e",
-		faces = {"ceiling", "wall_s", "wall_e"}},
-	{name = "portal_corner_ceiling_s_w",
-		faces = {"ceiling", "wall_s", "wall_w"}},
-}
+-- All 63 portal variants: every non-empty combination of 6 faces.
+-- Each variant is a compound nodebox with thin slabs on the
+-- required faces. Named portal_Nf_face1_face2_... where N is
+-- the face count and faces are in sorted order.
 
--- Register all 26 variants.
-for _, variant in ipairs(PORTAL_VARIANTS) do
-	local boxes = {}
-	for _, face in ipairs(variant.faces) do
-		boxes[#boxes + 1] = FACE_BOXES[face]
-	end
-	minetest.register_node(
-		"lazarus_space:" .. variant.name, {
-		description = "Lazarus Portal",
-		drawtype = "nodebox",
-		tiles = {"lazarus_space_lazarus_portal.png"},
-		node_box = {
-			type = "fixed",
-			fixed = boxes,
-		},
-		paramtype = "light",
-		walkable = false,
-		pointable = false,
-		buildable_to = false,
-		sunlight_propagates = false,
-		is_ground_content = false,
-		drop = "",
-		groups = {not_in_creative_inventory = 1},
-	})
-end
-
--- Build lookup table: sorted face key -> node name.
-lazarus_space.PORTAL_LOOKUP = {}
-for _, variant in ipairs(PORTAL_VARIANTS) do
-	local sorted = {}
-	for _, f in ipairs(variant.faces) do
-		sorted[#sorted + 1] = f
-	end
-	table.sort(sorted)
-	local key = table.concat(sorted, "+")
-	lazarus_space.PORTAL_LOOKUP[key] =
-		"lazarus_space:" .. variant.name
-end
-
--- ============================================================
--- PORTAL CRAMPED SPACE VARIANTS (4, 5, and 6-face)
--- ============================================================
-
--- Generate all combinations of k faces from the sorted list.
 local ALL_FACE_NAMES = {
 	"ceiling", "floor", "wall_e", "wall_n", "wall_s", "wall_w",
 }
@@ -339,15 +255,15 @@ local function face_subsets(k)
 	return results
 end
 
-for face_count = 4, 6 do
+lazarus_space.PORTAL_LOOKUP = {}
+
+for face_count = 1, 6 do
 	for _, face_set in ipairs(face_subsets(face_count)) do
-		-- Build node name: portal_4f_ceiling_floor_wall_n_wall_s
 		local name = "portal_" .. face_count .. "f"
 		for _, f in ipairs(face_set) do
 			name = name .. "_" .. f
 		end
 
-		-- Build nodebox with a thin slab for each face.
 		local boxes = {}
 		for _, f in ipairs(face_set) do
 			boxes[#boxes + 1] = FACE_BOXES[f]
@@ -372,7 +288,6 @@ for face_count = 4, 6 do
 			groups = {not_in_creative_inventory = 1},
 		})
 
-		-- Add to lookup table.
 		local key = table.concat(face_set, "+")
 		lazarus_space.PORTAL_LOOKUP[key] =
 			"lazarus_space:" .. name

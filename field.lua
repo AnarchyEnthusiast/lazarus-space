@@ -845,33 +845,8 @@ for i = 1, 20 do
 	orphan_nodenames[#orphan_nodenames + 1] =
 		"lazarus_space:disrupted_space_" .. i
 end
--- Portal surface coating variants (26 total).
-local portal_faces = {
-	"floor", "ceiling", "wall_n", "wall_s", "wall_e", "wall_w",
-}
-for _, f in ipairs(portal_faces) do
-	orphan_nodenames[#orphan_nodenames + 1] =
-		"lazarus_space:portal_" .. f
-end
-local portal_edges = {
-	"floor_n", "floor_s", "floor_e", "floor_w",
-	"ceiling_n", "ceiling_s", "ceiling_e", "ceiling_w",
-	"n_e", "n_w", "s_e", "s_w",
-}
-for _, e in ipairs(portal_edges) do
-	orphan_nodenames[#orphan_nodenames + 1] =
-		"lazarus_space:portal_edge_" .. e
-end
-local portal_corners = {
-	"floor_n_e", "floor_n_w", "floor_s_e", "floor_s_w",
-	"ceiling_n_e", "ceiling_n_w", "ceiling_s_e", "ceiling_s_w",
-}
-for _, c in ipairs(portal_corners) do
-	orphan_nodenames[#orphan_nodenames + 1] =
-		"lazarus_space:portal_corner_" .. c
-end
--- 4, 5, and 6-face cramped space variants.
-local all_face_names = {
+-- Portal surface coating variants (all 63 face combinations).
+local orphan_face_names = {
 	"ceiling", "floor", "wall_e", "wall_n", "wall_s", "wall_w",
 }
 local function orphan_face_subsets(k)
@@ -883,8 +858,8 @@ local function orphan_face_subsets(k)
 			results[#results + 1] = copy
 			return
 		end
-		for i = start, #all_face_names do
-			current[#current + 1] = all_face_names[i]
+		for i = start, #orphan_face_names do
+			current[#current + 1] = orphan_face_names[i]
 			recurse(i + 1, current)
 			current[#current] = nil
 		end
@@ -892,7 +867,7 @@ local function orphan_face_subsets(k)
 	recurse(1, {})
 	return results
 end
-for fc = 4, 6 do
+for fc = 1, 6 do
 	for _, fs in ipairs(orphan_face_subsets(fc)) do
 		local name = "lazarus_space:portal_" .. fc .. "f"
 		for _, f in ipairs(fs) do
