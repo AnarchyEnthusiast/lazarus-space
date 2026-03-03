@@ -371,12 +371,13 @@ end)
 minetest.register_craft({
 	output = "lazarus_space:continuum_disrupter",
 	recipe = {
-		{"default:mese", "technic:stainless_steel_ingot",
-			"default:mese"},
+		{"jumpdrive:warp_device",
+			"technic:stainless_steel_ingot",
+			"jumpdrive:warp_device"},
 		{"technic:stainless_steel_ingot",
 			"technic:hv_transformer",
 			"technic:stainless_steel_ingot"},
-		{"default:mese", "default:diamondblock",
-			"default:mese"},
+		{"jumpdrive:warp_device", "jumpdrive:jumpdrive",
+			"jumpdrive:warp_device"},
 	},
 })

@@ -357,8 +357,8 @@ end
 -- FIELD TEARDOWN
 -- ============================================================
 
---- Full field teardown: remove shell, randomly delete 50%
---- of interior blocks, transmute surviving natural terrain.
+--- Full field teardown: remove shell, portal, disrupted space,
+--- and randomly delete 50% of interior blocks.
 function lazarus_space.teardown_field(pos)
 	local hash = minetest.hash_node_position(pos)
 	local field = lazarus_space.active_fields[hash]
@@ -398,11 +398,9 @@ function lazarus_space.teardown_field(pos)
 	local radius = field.radius
 	local r_min = radius - 0.5
 	local r_max = radius + 0.5
-	local transmute = lazarus_space.TRANSMUTE_NODES
-
 	local stats = {
 		shell = 0, portal = 0, deleted = 0,
-		kept = 0, transmuted = 0,
+		kept = 0,
 	}
 
 	for dx = -radius - 1, radius + 1 do
@@ -460,24 +458,6 @@ function lazarus_space.teardown_field(pos)
 						goto next_pos
 					end
 
-					-- Decaying uranium: always transmute
-					-- to prevent post-collapse detonation.
-					if current.name
-							== "lazarus_space:decaying_uranium"
-							then
-						if #transmute > 0 then
-							minetest.set_node(p, {
-								name = transmute[
-									math.random(
-									#transmute)],
-							})
-						else
-							minetest.set_node(p,
-								{name = "air"})
-						end
-						goto next_pos
-					end
-
 					-- 50% random deletion of all
 					-- remaining solid blocks.
 					if math.random() < 0.5 then
@@ -496,58 +476,11 @@ function lazarus_space.teardown_field(pos)
 	end
 
 	minetest.log("action",
-		"Lazarus Space: teardown pass 1 —"
+		"Lazarus Space: teardown —"
 		.. " shell=" .. stats.shell
 		.. " portal=" .. stats.portal
 		.. " deleted=" .. stats.deleted
 		.. " kept=" .. stats.kept)
-
-	-- Pass 2: Transmute surviving natural terrain.
-	-- Natural blocks have is_ground_content = true
-	-- (dirt, stone, ores, sand, etc.). Player-placed
-	-- blocks (brick, glass, wool) are left alone.
-	if #transmute > 0 then
-		for dx = -radius - 1, radius + 1 do
-			for dy = -radius - 1, radius + 1 do
-				for dz = -radius - 1, radius + 1 do
-					local dist = math.sqrt(
-						dx * dx + dy * dy + dz * dz)
-					if dist >= r_min then goto next_t end
-					if dx == 0 and dy == 0 and dz == 0 then
-						goto next_t
-					end
-
-					local p = {
-						x = pos.x + dx,
-						y = pos.y + dy,
-						z = pos.z + dz,
-					}
-					local node = minetest.get_node(p)
-					if node.name == "air"
-							or node.name == "ignore" then
-						goto next_t
-					end
-
-					local def = minetest.registered_nodes[
-						node.name]
-					if def and def.is_ground_content then
-						minetest.set_node(p, {
-							name = transmute[
-								math.random(#transmute)],
-						})
-						stats.transmuted =
-							stats.transmuted + 1
-					end
-
-					::next_t::
-				end
-			end
-		end
-	end
-
-	minetest.log("action",
-		"Lazarus Space: pass 2 transmuted "
-		.. stats.transmuted .. " natural terrain blocks")
 
 	-- Safety sweep: force-remove any remaining disrupted_space
 	-- variants in the field volume. Catches edge cases where
@@ -598,8 +531,7 @@ function lazarus_space.teardown_field(pos)
 
 	minetest.log("action",
 		"Lazarus Space: field collapsed at "
-		.. minetest.pos_to_string(pos)
-		.. " (interior transmuted)")
+		.. minetest.pos_to_string(pos))
 end
 
 -- ============================================================
@@ -961,32 +893,6 @@ minetest.register_on_mods_loaded(function()
 		end
 	end
 
-	-- Build transmutation materials table from available nodes.
-	local transmute_candidates = {
-		"default:obsidian",
-		"default:gravel",
-		"default:stone",
-	}
-	-- 4th material: sulfur if available, else desert sand.
-	if minetest.registered_nodes["caverealms:sulfur"] then
-		transmute_candidates[#transmute_candidates + 1] =
-			"caverealms:sulfur"
-	else
-		transmute_candidates[#transmute_candidates + 1] =
-			"default:desert_sand"
-	end
-	for _, n in ipairs(transmute_candidates) do
-		if minetest.registered_nodes[n] then
-			lazarus_space.TRANSMUTE_NODES[
-				#lazarus_space.TRANSMUTE_NODES + 1] = n
-		end
-	end
-	if #lazarus_space.TRANSMUTE_NODES == 0 then
-		lazarus_space.TRANSMUTE_NODES[1] = "default:stone"
-	end
-	minetest.log("action",
-		"Lazarus Space: transmute materials: "
-		.. table.concat(lazarus_space.TRANSMUTE_NODES, ", "))
 
 	-- Universal node timer suppression.
 	-- Skip all jumpdrive nodes (including jumpdrive:warp_device)

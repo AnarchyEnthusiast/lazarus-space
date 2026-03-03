@@ -4,7 +4,6 @@
 lazarus_space = {}
 lazarus_space.active_fields = {}
 lazarus_space.CHARGE_REQUIRED = 120000
-lazarus_space.TRANSMUTE_NODES = {} -- populated on mod load
 
 --- Check if a node name is any disrupted space variant.
 function lazarus_space.is_disrupted_space(name)
