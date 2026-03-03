@@ -7,7 +7,7 @@
 local FIELD_RADIUS_MIN = 9
 local FIELD_RADIUS_MAX = 18
 local POWER_DEMAND = 12000 -- EU/s during charging
-local OBSERVATION_INTERVAL = 2.5 -- seconds between player checks
+local OBSERVATION_INTERVAL = 1.5 -- seconds between player checks
 local URANIUM_CHECK_INTERVAL = 0.8 -- seconds between inventory checks
 local EXPLOSION_RADIUS = 15
 
@@ -364,6 +364,10 @@ function lazarus_space.teardown_field(pos)
 	local field = lazarus_space.active_fields[hash]
 	if not field then return end
 
+	-- Remove from tracking first to prevent re-entry
+	-- when the device node is destroyed (on_destruct).
+	lazarus_space.active_fields[hash] = nil
+
 	-- Cancel warp charge if in progress.
 	if field.warp_charge_pos then
 		local gp = field.warp_charge_pos
@@ -394,7 +398,9 @@ function lazarus_space.teardown_field(pos)
 		end
 	end
 
-	local meta = minetest.get_meta(pos)
+	-- Destroy the continuum disrupter device.
+	minetest.set_node(pos, {name = "air"})
+
 	local radius = field.radius
 	local r_min = radius - 0.5
 	local r_max = radius + 0.5
@@ -410,26 +416,12 @@ function lazarus_space.teardown_field(pos)
 					+ dz * dz)
 				if dist > r_max then goto next_pos end
 
-				-- Skip device position.
-				if dx == 0 and dy == 0 and dz == 0 then
-					goto next_pos
-				end
-
 				local p = {
 					x = pos.x + dx,
 					y = pos.y + dy,
 					z = pos.z + dz,
 				}
 				local current = minetest.get_node(p)
-
-				-- Skip device nodes wherever they are.
-				if current.name
-						== "lazarus_space:continuum_disrupter"
-						or current.name
-						== "lazarus_space:continuum_disrupter_active"
-						then
-					goto next_pos
-				end
 
 				if dist >= r_min then
 					-- Shell: always replace with air.
@@ -509,25 +501,6 @@ function lazarus_space.teardown_field(pos)
 
 	-- Unfreeze entities.
 	lazarus_space.unfreeze_entities(pos, radius)
-
-	-- Remove from tracking table.
-	lazarus_space.active_fields[hash] = nil
-
-	-- Reset device metadata.
-	meta:set_string("state", "idle")
-	meta:set_int("charge", 0)
-	meta:set_int("HV_EU_demand", 0)
-	meta:set_int("HV_EU_input", 0)
-	meta:set_int("enabled", 0)
-	meta:set_string("originals", "")
-	meta:set_string("infotext",
-		"Continuum Disrupter (Idle)")
-
-	-- Swap to inactive node.
-	technic.swap_node(pos,
-		"lazarus_space:continuum_disrupter")
-
-	lazarus_space.build_formspec(pos)
 
 	minetest.log("action",
 		"Lazarus Space: field collapsed at "
@@ -834,15 +807,26 @@ minetest.register_globalstep(function(dtime)
 	-- Check each active field for player presence and freeze
 	-- any unfrozen entities found inside.
 	local to_collapse = {}
+	local players = minetest.get_connected_players()
 	for hash, field in pairs(lazarus_space.active_fields) do
+		-- Check all connected players against the sphere.
+		-- Catches every way a player can leave: teleport,
+		-- death, disconnect, admin commands, other mods.
 		local has_player = false
+		for _, player in ipairs(players) do
+			local d = vector.distance(
+				player:get_pos(), field.pos)
+			if d <= field.radius then
+				has_player = true
+				break
+			end
+		end
+
+		-- Freeze any unfrozen entities inside field.
 		local objects = minetest.get_objects_inside_radius(
 			field.pos, field.radius + 16)
 		for _, obj in ipairs(objects) do
-			if obj:is_player() then
-				has_player = true
-			else
-				-- Freeze any unfrozen entities inside field.
+			if not obj:is_player() then
 				local ent = obj:get_luaentity()
 				if ent and not ent.stasis_frozen then
 					local obj_pos = obj:get_pos()
@@ -860,6 +844,7 @@ minetest.register_globalstep(function(dtime)
 				end
 			end
 		end
+
 		if not has_player then
 			to_collapse[#to_collapse + 1] = field.pos
 		end
