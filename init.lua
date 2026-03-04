@@ -6,6 +6,7 @@ lazarus_space.active_fields = {}
 lazarus_space.charging_devices = {}
 lazarus_space.CHARGE_REQUIRED = 120000
 lazarus_space.POWER_DEMAND = 36000
+lazarus_space.mod_storage = minetest.get_mod_storage()
 
 --- Check if a node name is any disrupted space variant.
 function lazarus_space.is_disrupted_space(name)

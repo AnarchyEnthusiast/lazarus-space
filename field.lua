@@ -352,6 +352,9 @@ function lazarus_space.deploy_field(pos)
 	-- Freeze entities inside the field.
 	lazarus_space.freeze_entities(pos, radius)
 
+	-- Persist active field to mod storage for crash recovery.
+	lazarus_space.save_field_record(pos, radius)
+
 	lazarus_space.build_formspec(pos)
 
 	minetest.log("action",
@@ -375,6 +378,9 @@ function lazarus_space.teardown_field(pos)
 	-- when the device node is destroyed (on_destruct).
 	lazarus_space.active_fields[hash] = nil
 	lazarus_space.charging_devices[hash] = nil
+
+	-- Clear persistent record from mod storage.
+	lazarus_space.clear_field_record(pos)
 
 	-- Cancel warp charge if in progress.
 	if field.warp_charge_pos then
@@ -896,18 +902,18 @@ end)
 -- CHARGING PARTICLE RINGS
 -- ============================================================
 
--- 8 rings at evenly spaced tilts (0 to 157.5 degrees).
+-- 16 rings at evenly spaced tilts (0 to ~168.75 degrees).
 -- Each ring is a great circle around the sphere center.
 -- Alternating CW/CCW rotation, black/white particles.
 
-local RING_COUNT = 8
-local PARTICLES_PER_RING = 12
-local RING_SPAWN_INTERVAL = 0.2 -- seconds between spawns
+local RING_COUNT = 16
+local PARTICLES_PER_RING = 50
+local RING_SPAWN_INTERVAL = 0.1 -- seconds between spawns
 local RING_ROTATION_PERIOD = 3.5 -- seconds per full rotation
 local RING_FADE_DURATION = 1.5 -- seconds to fade out
-local PARTICLE_LIFETIME = 0.38
-local PARTICLE_SIZE_MIN = 0.3
-local PARTICLE_SIZE_MAX = 0.5
+local PARTICLE_LIFETIME = 0.25
+local PARTICLE_SIZE_MIN = 0.6
+local PARTICLE_SIZE_MAX = 0.8
 
 local ring_timer = 0
 minetest.register_globalstep(function(dtime)
@@ -970,11 +976,13 @@ minetest.register_globalstep(function(dtime)
 					* math.cos(tilt)
 
 				-- Alternate black/white.
-				local tex
+				local tex, particle_glow
 				if p % 2 == 0 then
 					tex = "lazarus_space_particle_black.png"
+					particle_glow = 0
 				else
 					tex = "lazarus_space_particle_white.png"
+					particle_glow = 8
 				end
 
 				local size = PARTICLE_SIZE_MIN
@@ -993,7 +1001,7 @@ minetest.register_globalstep(function(dtime)
 					size = size,
 					texture = tex
 						.. "^[opacity:" .. opacity,
-					glow = 0,
+					glow = particle_glow,
 					collisiondetection = false,
 				})
 			end
@@ -1008,10 +1016,256 @@ minetest.register_globalstep(function(dtime)
 end)
 
 -- ============================================================
+-- FIELD PERSISTENCE (CRASH / RESTART RECOVERY)
+-- ============================================================
+
+--- Save an active field record to mod storage.
+function lazarus_space.save_field_record(pos, radius)
+	local storage = lazarus_space.mod_storage
+	local records = minetest.deserialize(
+		storage:get_string("active_fields")) or {}
+	local key = minetest.pos_to_string(pos)
+	records[key] = {
+		x = pos.x, y = pos.y, z = pos.z,
+		radius = radius,
+	}
+	storage:set_string("active_fields",
+		minetest.serialize(records))
+end
+
+--- Clear an active field record from mod storage.
+function lazarus_space.clear_field_record(pos)
+	local storage = lazarus_space.mod_storage
+	local records = minetest.deserialize(
+		storage:get_string("active_fields")) or {}
+	local key = minetest.pos_to_string(pos)
+	if records[key] then
+		records[key] = nil
+		storage:set_string("active_fields",
+			minetest.serialize(records))
+	end
+end
+
+--- Cold collapse: teardown a field from persisted state only.
+--- Used on startup when active_fields table is empty.
+local function cold_collapse(pos, radius)
+	minetest.log("action",
+		"Lazarus Space: cold collapse at "
+		.. minetest.pos_to_string(pos)
+		.. " radius " .. radius)
+
+	-- Destroy the continuum disrupter device.
+	minetest.set_node(pos, {name = "air"})
+
+	local r_min = radius - 0.5
+	local r_max = radius + 0.5
+	local stats = {
+		shell = 0, portal = 0, deleted = 0, kept = 0,
+	}
+
+	for dx = -radius - 1, radius + 1 do
+		for dy = -radius - 1, radius + 1 do
+			for dz = -radius - 1, radius + 1 do
+				local dist = math.sqrt(
+					dx * dx + dy * dy + dz * dz)
+				if dist > r_max then goto next_cold end
+
+				local p = {
+					x = pos.x + dx,
+					y = pos.y + dy,
+					z = pos.z + dz,
+				}
+				local current = minetest.get_node(p)
+
+				if dist >= r_min then
+					-- Shell: always remove.
+					if current.name ~= "air"
+							and current.name ~= "ignore" then
+						minetest.set_node(p, {name = "air"})
+						stats.shell = stats.shell + 1
+					end
+				else
+					-- Portal: always remove.
+					if lazarus_space.is_portal(
+							current.name) then
+						minetest.set_node(p,
+							{name = "air"})
+						stats.portal = stats.portal + 1
+						goto next_cold
+					end
+
+					-- Disrupted space: always remove.
+					if lazarus_space.is_disrupted_space(
+							current.name) then
+						minetest.set_node(p,
+							{name = "air"})
+						goto next_cold
+					end
+
+					-- Skip air.
+					if current.name == "air" then
+						goto next_cold
+					end
+
+					-- 50% random deletion.
+					if math.random() < 0.5 then
+						minetest.set_node(p,
+							{name = "air"})
+						stats.deleted =
+							stats.deleted + 1
+					else
+						stats.kept = stats.kept + 1
+					end
+				end
+
+				::next_cold::
+			end
+		end
+	end
+
+	-- Safety sweep for straggler disrupted_space nodes.
+	for dx = -radius - 1, radius + 1 do
+		for dy = -radius - 1, radius + 1 do
+			for dz = -radius - 1, radius + 1 do
+				local dist = math.sqrt(
+					dx * dx + dy * dy + dz * dz)
+				if dist <= r_max then
+					local p = {
+						x = pos.x + dx,
+						y = pos.y + dy,
+						z = pos.z + dz,
+					}
+					local node = minetest.get_node(p)
+					if lazarus_space.is_disrupted_space(
+							node.name) then
+						minetest.set_node(p,
+							{name = "air"})
+					end
+				end
+			end
+		end
+	end
+
+	minetest.log("action",
+		"Lazarus Space: cold collapse complete —"
+		.. " shell=" .. stats.shell
+		.. " portal=" .. stats.portal
+		.. " deleted=" .. stats.deleted
+		.. " kept=" .. stats.kept)
+end
+
+--- Recover any fields that were active when the server stopped.
+--- Emerge the area first, then run cold collapse.
+local function recover_fields_on_startup()
+	local storage = lazarus_space.mod_storage
+	local records = minetest.deserialize(
+		storage:get_string("active_fields")) or {}
+
+	if not next(records) then return end
+
+	local count = 0
+	for _ in pairs(records) do count = count + 1 end
+	minetest.log("action",
+		"Lazarus Space: found " .. count
+		.. " active field(s) to recover")
+
+	for key, rec in pairs(records) do
+		local pos = {x = rec.x, y = rec.y, z = rec.z}
+		local radius = rec.radius
+
+		-- Force-load the area around the field.
+		local emerge_min = vector.subtract(pos, radius + 2)
+		local emerge_max = vector.add(pos, radius + 2)
+
+		minetest.emerge_area(emerge_min, emerge_max,
+			function(blockpos, action,
+					calls_remaining, param)
+				if calls_remaining > 0 then return end
+
+				-- Area fully loaded — run cold collapse.
+				cold_collapse(param.pos, param.radius)
+
+				-- Clear the record.
+				lazarus_space.clear_field_record(param.pos)
+
+				minetest.log("action",
+					"Lazarus Space: startup recovery"
+					.. " complete at "
+					.. minetest.pos_to_string(param.pos))
+			end,
+			{pos = pos, radius = radius})
+	end
+end
+
+-- ============================================================
+-- PLAYER DISCONNECT COLLAPSE
+-- ============================================================
+
+minetest.register_on_leaveplayer(function(player)
+	if not next(lazarus_space.active_fields) then return end
+
+	-- Get remaining connected players (excluding the one leaving).
+	local leaving_name = player:get_player_name()
+	local remaining = {}
+	for _, p in ipairs(minetest.get_connected_players()) do
+		if p:get_player_name() ~= leaving_name then
+			remaining[#remaining + 1] = p
+		end
+	end
+
+	local to_collapse = {}
+	for hash, field in pairs(lazarus_space.active_fields) do
+		local has_player = false
+		for _, p in ipairs(remaining) do
+			local d = vector.distance(p:get_pos(), field.pos)
+			if d <= field.radius then
+				has_player = true
+				break
+			end
+		end
+		if not has_player then
+			to_collapse[#to_collapse + 1] = field.pos
+		end
+	end
+
+	for _, fpos in ipairs(to_collapse) do
+		lazarus_space.teardown_field(fpos)
+	end
+end)
+
+-- ============================================================
+-- SERVER SHUTDOWN COLLAPSE
+-- ============================================================
+
+minetest.register_on_shutdown(function()
+	-- Collapse all active fields on clean shutdown.
+	local to_collapse = {}
+	for hash, field in pairs(lazarus_space.active_fields) do
+		to_collapse[#to_collapse + 1] = vector.new(field.pos)
+	end
+
+	for _, fpos in ipairs(to_collapse) do
+		lazarus_space.teardown_field(fpos)
+	end
+
+	-- Clear any remaining mod storage records as safety net.
+	lazarus_space.mod_storage:set_string("active_fields", "")
+
+	if #to_collapse > 0 then
+		minetest.log("action",
+			"Lazarus Space: shutdown — collapsed "
+			.. #to_collapse .. " active field(s)")
+	end
+end)
+
+-- ============================================================
 -- MOD LOAD HOOKS: ABM, NODE TIMER, AND ENTITY PATCHING
 -- ============================================================
 
 minetest.register_on_mods_loaded(function()
+
+	-- Recover any fields left active from a previous session.
+	recover_fields_on_startup()
 
 	-- Universal ABM suppression.
 	for _, abm_def in ipairs(minetest.registered_abms) do
