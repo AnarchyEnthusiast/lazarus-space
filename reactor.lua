@@ -244,33 +244,28 @@ end
 -- ============================================================
 
 local function build_unchecked_formspec()
-	return "formspec_version[4]"
-		.. "size[10,6]"
-		.. "bgcolor[#00000000]"
-		.. "background[0,0;10,6;lazarus_space_disrupter_top.png;true]"
-		.. "box[0,0;10,6;#111111CC]"
-		.. "label[2.2,1.5;Magnetic Fusion Reactor]"
-		.. "label[1.8,2.3;Structure Check Required]"
-		.. "button[3,3.5;4,0.8;check_structure;Check Structure]"
+	return "size[8,4]"
+		.. "bgcolor[#080808;true]"
+		.. "label[3,0.5;Magnetic Fusion Reactor]"
+		.. "label[2,1.5;Structure Check Required]"
+		.. "button[2.5,2.5;3,1;check_structure;Check Structure]"
 end
 
 local function build_error_formspec(errors)
-	local fs = "formspec_version[4]"
-		.. "size[10,8]"
-		.. "bgcolor[#00000000]"
-		.. "box[0,0;10,8;#111111CC]"
-		.. "label[2.2,0.8;Magnetic Fusion Reactor]"
-		.. "label[1.5,1.5;\\#FF4444Structure Check Failed:]"
+	local fs = "size[8,7]"
+		.. "bgcolor[#080808;true]"
+		.. "label[2.5,0.5;Magnetic Fusion Reactor]"
+		.. "label[1.5,1;Structure Check Failed:]"
 
-	local y = 2.2
+	local y = 1.5
 	for i, err in ipairs(errors) do
-		if i > 8 then break end
-		fs = fs .. "label[0.5," .. y .. ";\\#FFAAAA- " ..
+		if i > 6 then break end
+		fs = fs .. "label[0.5," .. y .. "; - " ..
 			minetest.formspec_escape(err) .. "]"
-		y = y + 0.55
+		y = y + 0.5
 	end
 
-	fs = fs .. "button[3," .. (y + 0.3) .. ";4,0.8;check_structure;Retry Check]"
+	fs = fs .. "button[2.5," .. (y + 0.5) .. ";3,1;check_structure;Retry Check]"
 	return fs
 end
 
@@ -312,75 +307,55 @@ local function build_reactor_formspec(pos)
 		if tier ~= "" then power_tier = tier end
 	end
 
-	-- State colors
-	local state_color, state_label
+	-- State label
+	local state_label
 	if state == "standby" then
-		state_color = "\\#FFCC00"
 		state_label = "Standby"
 	elseif state == "charging" then
-		state_color = "\\#FF8800"
 		state_label = "Charging... " .. charge_timer .. "s"
 	elseif state == "charged" then
-		state_color = "\\#FF8800"
-		state_label = "Charged — Ready to Inject"
+		state_label = "Charged - Ready to Inject"
 	elseif state == "active" then
-		state_color = "\\#44FF44"
 		state_label = "Active"
 	elseif state == "shutdown" then
-		state_color = "\\#FF4444"
 		state_label = "Shutdown"
 	else
-		state_color = "\\#AAAAAA"
 		state_label = state
 	end
 
-	local fs = "formspec_version[4]"
-		.. "size[10,11.5]"
-		.. "bgcolor[#00000000]"
-		.. "box[0,0;10,11.5;#111111CC]"
-		-- Title
-		.. "label[2.5,0.6;Magnetic Fusion Reactor]"
-		-- Status
-		.. "label[0.5,1.3;Status:]"
-		.. "label[2.2,1.3;" .. state_color .. state_label .. "]"
+	local fs = "size[8,9]"
+		.. "bgcolor[#080808;true]"
+		-- Title and status
+		.. "label[2.5,0;Magnetic Fusion Reactor]"
+		.. "label[0.5,0.5;Status: " .. state_label .. "]"
 		-- Fuel inventory
-		.. "label[0.5,2.0;Fuel Rods]"
-		.. "list[context;fuel;0.5,2.5;6,1;]"
-		.. "label[0.5,3.7;Fuel: " .. fuel_count .. "/" .. FUEL_SLOTS .. "]"
+		.. "label[1,1.5;Fuel Rods (" .. fuel_count .. "/" .. FUEL_SLOTS .. ")]"
+		.. "list[context;fuel;1,2;6,1;]"
 		-- HV Power status
-		.. "label[0.5,4.4;HV Power:]"
+		.. "label[0.5,3;HV Power: " .. (hv_ready and "Ready" or "Insufficient") .. "]"
 
-	if hv_ready then
-		fs = fs .. "label[2.8,4.4;\\#44FF44Ready]"
-	else
-		fs = fs .. "label[2.8,4.4;\\#FF4444Insufficient]"
-	end
-
-	-- Control buttons
+	-- Control buttons and output info
 	if state == "standby" then
 		if fuel_count >= FUEL_SLOTS and hv_ready then
-			fs = fs .. "button[0.5,5.2;4,0.8;charge;Charge]"
+			fs = fs .. "button[2.5,3.5;3,1;charge;Charge]"
 		else
-			fs = fs .. "box[0.5,5.2;4,0.8;#333333FF]"
-				.. "label[1.5,5.55;\\#666666Charge (not ready)]"
+			fs = fs .. "label[2.5,3.7;Charge (not ready)]"
 		end
 	elseif state == "charging" then
-		fs = fs .. "box[0.5,5.2;4,0.8;#FF8800FF]"
-			.. "label[1.2,5.55;Charging... " .. charge_timer .. "s]"
+		fs = fs .. "label[2.5,3.7;Charging... " .. charge_timer .. "s]"
 	elseif state == "charged" then
-		fs = fs .. "button[0.5,5.2;4,0.8;inject;Inject Fuel & Start]"
+		fs = fs .. "button[2,3.5;4,1;inject;Inject Fuel & Start]"
 	elseif state == "active" then
-		-- Fuel remaining display
 		local mins = math.floor(fuel_time / 60)
 		local secs = fuel_time % 60
-		fs = fs .. "label[0.5,5.3;Fuel Remaining: "
+		fs = fs .. "label[0.5,3.5;Fuel Remaining: "
 			.. string.format("%d:%02d", mins, secs) .. "]"
-		fs = fs .. "label[0.5,6.0;Reactor Output: 140,000 EU]"
-		fs = fs .. "label[0.5,6.6;Tier: " .. power_tier .. "]"
+		fs = fs .. "label[0.5,4;Output: 140,000 EU (" .. power_tier .. ")]"
 	end
 
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0.5,7.5;8,4;]"
+	fs = fs .. "list[current_player;main;0,5;8,1;]"
+		.. "list[current_player;main;0,6;8,3;8]"
 		.. "listring[context;fuel]"
 		.. "listring[current_player;main]"
 
@@ -801,7 +776,7 @@ minetest.register_node("lazarus_space:plasma_jumpstarter", {
 		technic_hv = 1,
 	},
 	is_ground_content = false,
-	connect_sides = {"bottom", "back", "left", "right"},
+	connect_sides = {"top", "bottom", "front", "back", "left", "right"},
 	sounds = default.node_sound_metal_defaults(),
 
 	on_construct = function(pos)
@@ -865,7 +840,7 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 		technic_lv = 1,
 	},
 	is_ground_content = false,
-	connect_sides = {"bottom", "back", "left", "right"},
+	connect_sides = {"top", "bottom", "front", "back", "left", "right"},
 	sounds = default.node_sound_metal_defaults(),
 
 	on_construct = function(pos)
@@ -904,29 +879,14 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 			output_label = "Output: 0 EU (Reactor Offline)"
 		end
 
-		-- Highlight current tier
-		local lv_style = ""
-		local mv_style = ""
-		local hv_style = ""
-		if tier == "LV" then
-			lv_style = "style[set_lv;bgcolor=#446644]"
-		elseif tier == "MV" then
-			mv_style = "style[set_mv;bgcolor=#444466]"
-		else
-			hv_style = "style[set_hv;bgcolor=#664444]"
-		end
-
-		local fs = "formspec_version[4]"
-			.. "size[8,5]"
-			.. "bgcolor[#00000000]"
-			.. "box[0,0;8,5;#111111CC]"
-			.. "label[2.2,0.7;Fusion Power Output]"
-			.. "label[0.5,1.5;Current Tier: " .. tier .. "]"
-			.. "label[0.5,2.1;" .. output_label .. "]"
-			.. lv_style .. mv_style .. hv_style
-			.. "button[0.5,3.0;2,0.8;set_lv;LV]"
-			.. "button[3.0,3.0;2,0.8;set_mv;MV]"
-			.. "button[5.5,3.0;2,0.8;set_hv;HV]"
+		local fs = "size[8,4]"
+			.. "bgcolor[#080808;true]"
+			.. "label[2,0;Fusion Power Output]"
+			.. "label[0.5,0.5;Current Tier: " .. tier .. "]"
+			.. "label[0.5,1;" .. output_label .. "]"
+			.. "button[0.5,2;2,1;set_lv;LV]"
+			.. "button[3,2;2,1;set_mv;MV]"
+			.. "button[5.5,2;2,1;set_hv;HV]"
 
 		minetest.show_formspec(clicker:get_player_name(),
 			"lazarus_space:power_output_" .. minetest.pos_to_string(pos), fs)
