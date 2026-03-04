@@ -907,7 +907,7 @@ end)
 -- Alternating CW/CCW rotation, black/white particles.
 
 local RING_COUNT = 16
-local PARTICLES_PER_RING = 50
+local PARTICLES_PER_RING = 150
 local RING_SPAWN_INTERVAL = 0.1 -- seconds between spawns
 local RING_ROTATION_PERIOD = 3.5 -- seconds per full rotation
 local RING_FADE_DURATION = 1.5 -- seconds to fade out
