@@ -906,7 +906,7 @@ end)
 -- Each ring is a great circle around the sphere center.
 -- Alternating CW/CCW rotation, black/white particles.
 
-local RING_COUNT = 16
+local RING_COUNT = 32
 local PARTICLES_PER_RING = 150
 local RING_SPAWN_INTERVAL = 0.1 -- seconds between spawns
 local RING_ROTATION_PERIOD = 3.5 -- seconds per full rotation
