@@ -1,5 +1,5 @@
 -- Lazarus Space: Magnetic Fusion Reactor
--- 11x11x5 multiblock structure with charge sequence and power output.
+-- 13x13x5 multiblock structure with charge sequence and power output.
 
 -- ============================================================
 -- CONSTANTS
@@ -52,229 +52,111 @@ end
 -- ============================================================
 -- MULTIBLOCK STRUCTURE DEFINITION
 -- ============================================================
--- Offsets relative to the pole_corrector at (0,0,0).
--- The structure is a cross/plus shape, 11x11x5.
+-- Generated from /home/dev/MGMT/reference/reactor2.mts schematic.
+-- 13x13x5 cross shape. Offsets relative to the pole_corrector at (0,0,0).
 -- Floor at y=-2, Roof at y=+2, middle layers y=-1,0,+1.
+-- 314 total blocks: 120 PF, 96 TF, 65 SB, 28 PLF, 4 PLC, 1 PC, + 3 enforced air.
 
 local STRUCTURE = {}
 
--- Helper to add an entry
 local function S(dx, dy, dz, node)
 	STRUCTURE[#STRUCTURE+1] = {x=dx, y=dy, z=dz, node=node}
 end
 
--- Shorthand node names
-local PF = "lazarus_space:pole_field"
-local TF = "lazarus_space:toroid_field"
-local SB = "default:steelblock"
-local PC = "lazarus_space:pole_corrector"
+local PF  = "lazarus_space:pole_field"
+local TF  = "lazarus_space:toroid_field"
+local PLF = "lazarus_space:plasma_field"
+local PLC = "lazarus_space:plasma_field_corner"
+local PC  = "lazarus_space:pole_corrector"
+local SB  = "default:steelblock"
 local AIR = "air"
 
--- ---- FLOOR (y = -2): pole_field platform ----
--- The floor is a cross shape matching the overall footprint.
--- Center 3x3
-for dx = -1, 1 do
-	for dz = -1, 1 do
-		S(dx, -2, dz, PF)
-	end
-end
--- Four arms extending from center, each arm is 3 wide and extends 4 blocks
--- North arm (z positive): z=2..5, x=-1..1
-for dz = 2, 5 do
-	for dx = -1, 1 do
-		S(dx, -2, dz, PF)
-	end
-end
--- South arm (z negative): z=-5..-2, x=-1..1
-for dz = -5, -2 do
-	for dx = -1, 1 do
-		S(dx, -2, dz, PF)
-	end
-end
--- East arm (x positive): x=2..5, z=-1..1
-for dx = 2, 5 do
-	for dz = -1, 1 do
-		S(dx, -2, dz, PF)
-	end
-end
--- West arm (x negative): x=-5..-2, z=-1..1
-for dx = -5, -2 do
-	for dz = -1, 1 do
-		S(dx, -2, dz, PF)
-	end
-end
+-- ---- FLOOR (y = -2): pole_field border, steelblock interior grid ----
+-- Outer ring of pole_field
+for i = -6, 6 do S(i,-2,-6, PF); S(i,-2, 6, PF) end  -- north/south rows
+for i = -5, 5 do S(-6,-2, i, PF); S( 6,-2, i, PF) end -- west/east columns
+-- Steelblock cross at arm positions (center row/col z=0, and arm edges)
+S( 0,-2, 0, SB)
+-- z=0 row: full steelblock spine
+for i = -5, 5 do S(i,-2, 0, SB) end
+-- x=0 column: full steelblock spine
+for i = -5, 5 do if i ~= 0 then S(0,-2, i, SB) end end
+-- Corner steelblock pairs at (+-5, +-5) and 3x3 center steelblock ring
+for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],-2,c[2], SB) end
+-- 3x3 steelblock ring around center at z=+-1, x=+-1
+S(-1,-2,-1, SB); S( 0,-2,-1, SB); S( 1,-2,-1, SB)
+S(-1,-2, 1, SB); S( 0,-2, 1, SB); S( 1,-2, 1, SB)
 
--- ---- ROOF (y = +2): same pattern as floor ----
-for dx = -1, 1 do
-	for dz = -1, 1 do
-		S(dx, 2, dz, PF)
+-- ---- ROOF (y = +2): pole_field border, steelblock corners, air center ----
+for i = -6, 6 do S(i, 2,-6, PF); S(i, 2, 6, PF) end
+for i = -5, 5 do S(-6, 2, i, PF); S( 6, 2, i, PF) end
+for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1], 2,c[2], SB) end
+S(0, 2, 0, AIR) -- air above pole corrector
+
+-- ---- MIDDLE LAYERS y=-1 and y=+1 (symmetric): toroid walls, steelblock transitions ----
+for _, dy in ipairs({-1, 1}) do
+	-- Corner steelblocks
+	for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],dy,c[2], SB) end
+	-- North/South arm toroid walls (3 columns: x=-2, 0, +2)
+	for _, dz in ipairs({-5,-4,-3, 3,4,5}) do
+		S(-2,dy,dz, TF); S(0,dy,dz, TF); S(2,dy,dz, TF)
 	end
-end
-for dz = 2, 5 do
-	for dx = -1, 1 do
-		S(dx, 2, dz, PF)
-	end
-end
-for dz = -5, -2 do
-	for dx = -1, 1 do
-		S(dx, 2, dz, PF)
-	end
-end
-for dx = 2, 5 do
-	for dz = -1, 1 do
-		S(dx, 2, dz, PF)
-	end
-end
-for dx = -5, -2 do
-	for dz = -1, 1 do
-		S(dx, 2, dz, PF)
-	end
+	-- East/West arm toroid walls (3 rows: z=-2, 0, +2)
+	-- But NOT overlapping the N/S arm ranges
+	S(-5,dy,-2, TF); S(-4,dy,-2, TF); S(-3,dy,-2, TF)
+	S( 3,dy,-2, TF); S( 4,dy,-2, TF); S( 5,dy,-2, TF)
+	S(-5,dy, 0, TF); S(-4,dy, 0, TF); S(-3,dy, 0, TF)
+	S( 3,dy, 0, TF); S( 4,dy, 0, TF); S( 5,dy, 0, TF)
+	S(-5,dy, 2, TF); S(-4,dy, 2, TF); S(-3,dy, 2, TF)
+	S( 3,dy, 2, TF); S( 4,dy, 2, TF); S( 5,dy, 2, TF)
+	-- Steel block transitions at arm-to-center boundary
+	S(-2,dy, 0, SB); S( 2,dy, 0, SB)
+	S( 0,dy,-2, SB); S( 0,dy, 2, SB)
+	-- Center 3x3: pole field ring with air at (0,0)
+	S(-1,dy,-1, PF); S( 0,dy,-1, PF); S( 1,dy,-1, PF)
+	S(-1,dy, 0, PF);                   S( 1,dy, 0, PF)
+	S(-1,dy, 1, PF); S( 0,dy, 1, PF); S( 1,dy, 1, PF)
+	-- Air above/below pole corrector
+	S(0,dy, 0, AIR)
 end
 
--- ---- MIDDLE LAYERS (y = -1, 0, +1) ----
-
--- Center 3x3 pole field column (all 3 middle layers)
--- except (0,0,0) which is the pole corrector
--- and (0,-1,0) and (0,+1,0) which are air
-for dy = -1, 1 do
-	for dx = -1, 1 do
-		for dz = -1, 1 do
-			if dx == 0 and dz == 0 then
-				if dy == 0 then
-					S(0, 0, 0, PC)
-				else
-					S(0, dy, 0, AIR)
-				end
-			else
-				S(dx, dy, dz, PF)
-			end
-		end
-	end
-end
-
--- Steel blocks at arm-to-center transitions (y=-1,0,+1)
--- These are at the positions where arms meet the 3x3 center
--- North: (0, y, 2) is transition — but looking at screenshots,
--- steel blocks are at the inner edge of arms, bridging center to arm
--- Based on screenshots: steelblocks at x=+-2,z=0 and x=0,z=+-2
--- at the boundary between center 3x3 and arm start
-for dy = -1, 1 do
-	-- North transition
-	S(0, dy, 2, SB)
-	-- South transition
-	S(0, dy, -2, SB)
-	-- East transition
-	S(2, dy, 0, SB)
-	-- West transition
-	S(-2, dy, 0, SB)
-end
-
--- Arm walls: toroid field blocks form the outer walls of each arm
--- Each arm is 3 wide. The walls are the outer two rows (edges).
--- The interior of each arm is air.
-
-for dy = -1, 1 do
-	-- North arm: z=2..5, walls at x=-1 and x=1, interior at x=0
-	for dz = 2, 5 do
-		S(-1, dy, dz, TF)
-		S(1, dy, dz, TF)
-		-- Interior air (except z=2 which has steelblock at x=0)
-		if dz > 2 then
-			S(0, dy, dz, AIR)
-		end
-	end
-	-- South arm: z=-5..-2
-	for dz = -5, -2 do
-		S(-1, dy, dz, TF)
-		S(1, dy, dz, TF)
-		if dz < -2 then
-			S(0, dy, dz, AIR)
-		end
-	end
-	-- East arm: x=2..5
-	for dx = 2, 5 do
-		S(dx, dy, -1, TF)
-		S(dx, dy, 1, TF)
-		if dx > 2 then
-			S(dx, dy, 0, AIR)
-		end
-	end
-	-- West arm: x=-5..-2
-	for dx = -5, -2 do
-		S(dx, dy, -1, TF)
-		S(dx, dy, 1, TF)
-		if dx < -2 then
-			S(dx, dy, 0, AIR)
-		end
-	end
-end
-
--- Plasma field ring connecting arm tips at the outer perimeter
--- This runs around the outside connecting the 4 arm ends.
--- Arm tips are at z=5 (north), z=-5 (south), x=5 (east), x=-5 (west)
--- The plasma field connects them at y=-1,0,+1 around the perimeter
--- Based on screenshots, plasma field is at the arm tips and corners
-
-for dy = -1, 1 do
-	-- North arm tip cap: z=5, x=-1,0,1 — already have TF walls at x=-1,1
-	-- Plasma field at the end cap
-	S(0, dy, 5, "lazarus_space:plasma_field")
-
-	-- South arm tip cap
-	S(0, dy, -5, "lazarus_space:plasma_field")
-
-	-- East arm tip cap
-	S(5, dy, 0, "lazarus_space:plasma_field")
-
-	-- West arm tip cap
-	S(-5, dy, 0, "lazarus_space:plasma_field")
-
-	-- Corner connections between arm tips
-	-- NE corner path: from (1,y,5) to (5,y,1)
-	-- Plasma runs along the diagonal corners
-	-- Based on screenshots: plasma at corners connecting arms
-	-- NE: (2,y,5), (3,y,5), (4,y,5), (5,y,5), (5,y,4), (5,y,3), (5,y,2), (5,y,1)
-	-- But that's outside the cross. Looking at screenshots more carefully,
-	-- the plasma ring runs at the tips: straight sections along the arm ends
-	-- and corners where perpendicular arms meet.
-	-- Let me place plasma along outer edge of arm tips:
-
-	-- North-East corner: connects north arm (z=5) east edge to east arm (x=5) north edge
-	S(2, dy, 5, "lazarus_space:plasma_field")
-	S(3, dy, 5, "lazarus_space:plasma_field")
-	S(4, dy, 5, "lazarus_space:plasma_field")
-	S(5, dy, 5, "lazarus_space:plasma_field") -- corner
-	S(5, dy, 4, "lazarus_space:plasma_field")
-	S(5, dy, 3, "lazarus_space:plasma_field")
-	S(5, dy, 2, "lazarus_space:plasma_field")
-
-	-- South-East corner
-	S(2, dy, -5, "lazarus_space:plasma_field")
-	S(3, dy, -5, "lazarus_space:plasma_field")
-	S(4, dy, -5, "lazarus_space:plasma_field")
-	S(5, dy, -5, "lazarus_space:plasma_field") -- corner
-	S(5, dy, -4, "lazarus_space:plasma_field")
-	S(5, dy, -3, "lazarus_space:plasma_field")
-	S(5, dy, -2, "lazarus_space:plasma_field")
-
-	-- North-West corner
-	S(-2, dy, 5, "lazarus_space:plasma_field")
-	S(-3, dy, 5, "lazarus_space:plasma_field")
-	S(-4, dy, 5, "lazarus_space:plasma_field")
-	S(-5, dy, 5, "lazarus_space:plasma_field") -- corner
-	S(-5, dy, 4, "lazarus_space:plasma_field")
-	S(-5, dy, 3, "lazarus_space:plasma_field")
-	S(-5, dy, 2, "lazarus_space:plasma_field")
-
-	-- South-West corner
-	S(-2, dy, -5, "lazarus_space:plasma_field")
-	S(-3, dy, -5, "lazarus_space:plasma_field")
-	S(-4, dy, -5, "lazarus_space:plasma_field")
-	S(-5, dy, -5, "lazarus_space:plasma_field") -- corner
-	S(-5, dy, -4, "lazarus_space:plasma_field")
-	S(-5, dy, -3, "lazarus_space:plasma_field")
-	S(-5, dy, -2, "lazarus_space:plasma_field")
-end
+-- ---- MIDDLE LAYER y=0: the main layer with plasma ring, pole corrector ----
+-- Corner steelblocks (doubled at plasma ring junction)
+S(-5, 0,-5, SB); S(-4, 0,-5, SB); S( 4, 0,-5, SB); S( 5, 0,-5, SB)
+S(-5, 0, 5, SB); S(-4, 0, 5, SB); S( 4, 0, 5, SB); S( 5, 0, 5, SB)
+S(-5, 0,-4, SB); S( 5, 0,-4, SB)
+S(-5, 0, 4, SB); S( 5, 0, 4, SB)
+-- Plasma field ring (straight pieces)
+S(-4, 0,-4, PLF); S(-2, 0,-4, PLF); S(-1, 0,-4, PLF); S( 0, 0,-4, PLF)
+S( 1, 0,-4, PLF); S( 2, 0,-4, PLF); S( 3, 0,-4, PLF)
+S(-4, 0,-3, PLF); S( 4, 0,-3, PLF)
+S(-4, 0,-2, PLF); S( 4, 0,-2, PLF)
+S(-4, 0,-1, PLF); S( 4, 0,-1, PLF)
+S(-4, 0, 0, PLF); S( 4, 0, 0, PLF)
+S(-4, 0, 1, PLF); S( 4, 0, 1, PLF)
+S(-4, 0, 2, PLF); S( 4, 0, 2, PLF)
+S( 4, 0, 3, PLF)
+S(-4, 0, 4, PLF); S(-3, 0, 4, PLF); S(-2, 0, 4, PLF); S(-1, 0, 4, PLF)
+S( 0, 0, 4, PLF); S( 1, 0, 4, PLF); S( 3, 0, 4, PLF); S( 4, 0, 4, PLF)
+-- Plasma field corners (4 corners of the ring)
+S(-3, 0,-4, PLC)  -- NW corner
+S( 4, 0,-4, PLC)  -- NE corner
+S(-4, 0, 3, PLC)  -- SW corner
+S( 2, 0, 4, PLC)  -- SE corner
+-- Toroid walls inside the plasma ring (arm walls)
+S(-2, 0,-5, TF); S( 0, 0,-5, TF); S( 2, 0,-5, TF)
+S(-2, 0,-3, TF); S( 0, 0,-3, TF); S( 2, 0,-3, TF)
+S(-5, 0,-2, TF); S(-3, 0,-2, TF); S( 3, 0,-2, TF); S( 5, 0,-2, TF)
+S(-5, 0, 0, TF); S(-3, 0, 0, TF); S( 3, 0, 0, TF); S( 5, 0, 0, TF)
+S(-5, 0, 2, TF); S(-3, 0, 2, TF); S( 3, 0, 2, TF); S( 5, 0, 2, TF)
+S(-2, 0, 3, TF); S( 0, 0, 3, TF); S( 2, 0, 3, TF)
+S(-2, 0, 5, TF); S( 0, 0, 5, TF); S( 2, 0, 5, TF)
+-- Steel block transitions at arm-to-center boundary
+S(-2, 0, 0, SB); S( 2, 0, 0, SB); S( 0, 0,-2, SB); S( 0, 0, 2, SB)
+-- Center 3x3: pole field ring with pole corrector
+S(-1, 0,-1, PF); S( 0, 0,-1, PF); S( 1, 0,-1, PF)
+S(-1, 0, 0, PF); S( 0, 0, 0, PC); S( 1, 0, 0, PF)
+S(-1, 0, 1, PF); S( 0, 0, 1, PF); S( 1, 0, 1, PF)
 
 -- ============================================================
 -- STRUCTURE VALIDATION
@@ -282,7 +164,7 @@ end
 
 --- Find the pole corrector near a given position.
 local function find_pole_corrector(pos)
-	local range = 6
+	local range = 8
 	for dx = -range, range do
 		for dy = -range, range do
 			for dz = -range, range do
@@ -317,9 +199,8 @@ function lazarus_space.validate_reactor_structure(panel_pos)
 		local expected = entry.node
 
 		-- For plasma field positions, accept both straight and corner variants
-		if expected == "lazarus_space:plasma_field" then
-			if node.name ~= "lazarus_space:plasma_field"
-				and node.name ~= "lazarus_space:plasma_field_corner" then
+		if expected == PLF or expected == PLC then
+			if node.name ~= PLF and node.name ~= PLC then
 				errors[#errors+1] = string.format(
 					"Offset (%d,%d,%d): expected plasma field, found %s",
 					entry.x, entry.y, entry.z, node.name)
