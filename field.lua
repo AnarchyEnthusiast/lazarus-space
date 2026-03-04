@@ -6,7 +6,7 @@
 
 local FIELD_RADIUS_MIN = 9
 local FIELD_RADIUS_MAX = 18
-local POWER_DEMAND = 12000 -- EU/s during charging
+local POWER_DEMAND = lazarus_space.POWER_DEMAND
 local OBSERVATION_INTERVAL = 1.5 -- seconds between player checks
 local URANIUM_CHECK_INTERVAL = 0.8 -- seconds between inventory checks
 local EXPLOSION_RADIUS = 15
@@ -50,7 +50,7 @@ function lazarus_space.pos_belongs_to_field(pos)
 end
 
 --- Calculate the largest field radius that fits in loaded area.
-local function calculate_field_radius(pos)
+function lazarus_space.calculate_field_radius(pos)
 	for r = FIELD_RADIUS_MAX, FIELD_RADIUS_MIN, -1 do
 		local all_loaded = true
 		-- Sample axis-aligned extremes.
@@ -170,7 +170,7 @@ function lazarus_space.deploy_field(pos)
 	if lazarus_space.active_fields[hash] then return end
 
 	local meta = minetest.get_meta(pos)
-	local radius = calculate_field_radius(pos)
+	local radius = lazarus_space.calculate_field_radius(pos)
 	local r_min = radius - 0.5
 	local r_max = radius + 0.5
 
@@ -255,6 +255,13 @@ function lazarus_space.deploy_field(pos)
 	minetest.log("action",
 		"Lazarus Space: deployed " .. shell_count
 		.. " shell nodes")
+
+	-- Stop charging particle rings (fade out).
+	local charging_entry = lazarus_space.charging_devices[hash]
+	if charging_entry then
+		charging_entry.fading = true
+		charging_entry.fade_start = minetest.get_us_time() / 1e6
+	end
 
 	-- Swap device to active variant.
 	technic.swap_node(pos,
@@ -367,6 +374,7 @@ function lazarus_space.teardown_field(pos)
 	-- Remove from tracking first to prevent re-entry
 	-- when the device node is destroyed (on_destruct).
 	lazarus_space.active_fields[hash] = nil
+	lazarus_space.charging_devices[hash] = nil
 
 	-- Cancel warp charge if in progress.
 	if field.warp_charge_pos then
@@ -598,14 +606,41 @@ function lazarus_space.on_receive_fields(pos, formname, fields, sender)
 	local state = meta:get_string("state")
 
 	if fields.activate and state == "idle" then
+		local radius = lazarus_space.calculate_field_radius(pos)
 		meta:set_string("state", "charging")
 		meta:set_int("charge", 0)
 		meta:set_int("enabled", 1)
+		meta:set_int("anticipated_radius", radius)
 		meta:set_string("infotext",
 			"Continuum Disrupter (Charging)")
+
+		-- Register for particle ring spawning.
+		local hash = minetest.hash_node_position(pos)
+		lazarus_space.charging_devices[hash] = {
+			pos = vector.new(pos),
+			radius = radius,
+			start_time = minetest.get_us_time() / 1e6,
+			fading = false,
+			fade_start = 0,
+		}
+
 		lazarus_space.build_formspec(pos)
 	elseif fields.deactivate and state ~= "idle" then
-		lazarus_space.teardown_field(pos)
+		if state == "charging" then
+			-- Charging phase: no active_fields entry yet,
+			-- just reset to idle.
+			local hash = minetest.hash_node_position(pos)
+			lazarus_space.charging_devices[hash] = nil
+			meta:set_string("state", "idle")
+			meta:set_int("charge", 0)
+			meta:set_int("HV_EU_demand", 0)
+			meta:set_int("enabled", 0)
+			meta:set_string("infotext",
+				"Continuum Disrupter (Idle)")
+			lazarus_space.build_formspec(pos)
+		else
+			lazarus_space.teardown_field(pos)
+		end
 	end
 end
 
@@ -614,6 +649,8 @@ function lazarus_space.technic_on_disable(pos, node)
 	local state = meta:get_string("state")
 	-- Network disconnect during charging: reset to idle.
 	if state == "charging" then
+		local hash = minetest.hash_node_position(pos)
+		lazarus_space.charging_devices[hash] = nil
 		meta:set_string("state", "idle")
 		meta:set_int("charge", 0)
 		meta:set_int("HV_EU_demand", 0)
@@ -852,6 +889,121 @@ minetest.register_globalstep(function(dtime)
 
 	for _, fpos in ipairs(to_collapse) do
 		lazarus_space.teardown_field(fpos)
+	end
+end)
+
+-- ============================================================
+-- CHARGING PARTICLE RINGS
+-- ============================================================
+
+-- 8 rings at evenly spaced tilts (0 to 157.5 degrees).
+-- Each ring is a great circle around the sphere center.
+-- Alternating CW/CCW rotation, black/white particles.
+
+local RING_COUNT = 8
+local PARTICLES_PER_RING = 12
+local RING_SPAWN_INTERVAL = 0.2 -- seconds between spawns
+local RING_ROTATION_PERIOD = 3.5 -- seconds per full rotation
+local RING_FADE_DURATION = 1.5 -- seconds to fade out
+local PARTICLE_LIFETIME = 0.38
+local PARTICLE_SIZE_MIN = 0.3
+local PARTICLE_SIZE_MAX = 0.5
+
+local ring_timer = 0
+minetest.register_globalstep(function(dtime)
+	ring_timer = ring_timer + dtime
+	if ring_timer < RING_SPAWN_INTERVAL then return end
+	ring_timer = 0
+
+	local now = minetest.get_us_time() / 1e6
+	local to_remove = {}
+
+	for hash, dev in pairs(lazarus_space.charging_devices) do
+		-- Check if fading and expired.
+		if dev.fading then
+			local fade_elapsed = now - dev.fade_start
+			if fade_elapsed >= RING_FADE_DURATION then
+				to_remove[#to_remove + 1] = hash
+				goto next_dev
+			end
+		end
+
+		-- Calculate opacity for fade.
+		local opacity = 255
+		if dev.fading then
+			local fade_elapsed = now - dev.fade_start
+			local t = 1 - (fade_elapsed / RING_FADE_DURATION)
+			if t < 0 then t = 0 end
+			opacity = math.floor(255 * t)
+			if opacity <= 0 then
+				to_remove[#to_remove + 1] = hash
+				goto next_dev
+			end
+		end
+
+		local elapsed = now - dev.start_time
+		local center = dev.pos
+		local radius = dev.radius
+
+		for ring = 0, RING_COUNT - 1 do
+			-- Tilt angle: evenly distributed across 180 degrees.
+			local tilt = ring * math.pi / RING_COUNT
+
+			-- Rotation direction: alternate CW/CCW.
+			local direction = (ring % 2 == 0) and 1 or -1
+
+			-- Current rotation offset.
+			local rot_offset = direction * elapsed
+				* (2 * math.pi / RING_ROTATION_PERIOD)
+
+			for p = 0, PARTICLES_PER_RING - 1 do
+				-- Angle along the ring.
+				local phi = rot_offset
+					+ p * (2 * math.pi / PARTICLES_PER_RING)
+
+				-- Position on tilted great circle.
+				-- Tilt around X axis.
+				local x = radius * math.cos(phi)
+				local y = -radius * math.sin(phi)
+					* math.sin(tilt)
+				local z = radius * math.sin(phi)
+					* math.cos(tilt)
+
+				-- Alternate black/white.
+				local tex
+				if p % 2 == 0 then
+					tex = "lazarus_space_particle_black.png"
+				else
+					tex = "lazarus_space_particle_white.png"
+				end
+
+				local size = PARTICLE_SIZE_MIN
+					+ math.random()
+					* (PARTICLE_SIZE_MAX - PARTICLE_SIZE_MIN)
+
+				minetest.add_particle({
+					pos = {
+						x = center.x + x,
+						y = center.y + y,
+						z = center.z + z,
+					},
+					velocity = {x = 0, y = 0, z = 0},
+					acceleration = {x = 0, y = 0, z = 0},
+					expirationtime = PARTICLE_LIFETIME,
+					size = size,
+					texture = tex
+						.. "^[opacity:" .. opacity,
+					glow = 0,
+					collisiondetection = false,
+				})
+			end
+		end
+
+		::next_dev::
+	end
+
+	for _, hash in ipairs(to_remove) do
+		lazarus_space.charging_devices[hash] = nil
 	end
 end)
 

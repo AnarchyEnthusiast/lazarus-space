@@ -251,6 +251,76 @@ def generate_star_nebula():
     return img
 
 
+def generate_progress_bg():
+    """Dark grey progress bar background, 256x16."""
+    img = Image.new("RGBA", (256, 16))
+    for y in range(16):
+        for x in range(256):
+            # 1px border in lighter grey.
+            if x == 0 or x == 255 or y == 0 or y == 15:
+                r, g, b = 0x33, 0x33, 0x33
+            else:
+                r, g, b = 0x1a, 0x1a, 0x1a
+            img.putpixel((x, y), (r, g, b, 255))
+    return img
+
+
+def generate_progress_fill():
+    """Teal-to-cyan gradient progress bar fill, 256x16."""
+    img = Image.new("RGBA", (256, 16))
+    for y in range(16):
+        for x in range(256):
+            t = x / 255.0
+            # Deep teal (#006666) to bright cyan (#00ffcc).
+            r = 0
+            g = int(0x66 + t * (0xff - 0x66))
+            b = int(0x66 + t * (0xcc - 0x66))
+            # Slight rounded corners (skip corner pixels).
+            if (x <= 1 or x >= 254) and (y == 0 or y == 15):
+                img.putpixel((x, y), (0, 0, 0, 0))
+            else:
+                img.putpixel((x, y), (r, g, b, 255))
+    return img
+
+
+def generate_particle_black():
+    """Soft black circle particle, 8x8."""
+    img = Image.new("RGBA", (8, 8))
+    cx, cy = 3.5, 3.5
+    for y in range(8):
+        for x in range(8):
+            dx, dy = x - cx, y - cy
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < 1.5:
+                alpha = 255
+            elif dist < 3.5:
+                t = (dist - 1.5) / 2.0
+                alpha = int(255 * (1 - t))
+            else:
+                alpha = 0
+            img.putpixel((x, y), (0, 0, 0, alpha))
+    return img
+
+
+def generate_particle_white():
+    """Soft white circle particle, 8x8."""
+    img = Image.new("RGBA", (8, 8))
+    cx, cy = 3.5, 3.5
+    for y in range(8):
+        for x in range(8):
+            dx, dy = x - cx, y - cy
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < 1.5:
+                alpha = 255
+            elif dist < 3.5:
+                t = (dist - 1.5) / 2.0
+                alpha = int(255 * (1 - t))
+            else:
+                alpha = 0
+            img.putpixel((x, y), (255, 255, 255, alpha))
+    return img
+
+
 def generate_disrupted_space_variants():
     """Generate 20 opacity variants of the disrupted space texture.
 
@@ -291,6 +361,10 @@ def main():
         "lazarus_space_star_near.png": generate_star_near(),
         "lazarus_space_star_far.png": generate_star_far(),
         "lazarus_space_star_nebula.png": generate_star_nebula(),
+        "lazarus_space_progress_bg.png": generate_progress_bg(),
+        "lazarus_space_progress_fill.png": generate_progress_fill(),
+        "lazarus_space_particle_black.png": generate_particle_black(),
+        "lazarus_space_particle_white.png": generate_particle_white(),
     }
 
     # Add 20 disrupted space opacity variants.
