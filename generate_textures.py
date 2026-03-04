@@ -321,6 +321,286 @@ def generate_particle_white():
     return img
 
 
+def generate_pole_field():
+    """Orange industrial metal panel, 16x16. Beveled border, 4x4 subdivision
+    grid, rivet dots, brushed metal gradient."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Base orange with vertical gradient (lighter top, darker bottom)
+            grad = 1.0 - y / 30.0  # subtle top-to-bottom darkening
+            r = clamp(int(232 * grad))
+            g = clamp(int(100 * grad))
+            b = clamp(int(0 * grad + 10))
+
+            # 1px beveled outer border
+            if x == 0 or y == 0:
+                r = clamp(r + 30); g = clamp(g + 15)  # highlight
+            if x == 15 or y == 15:
+                r = clamp(r - 40); g = clamp(g - 20)  # shadow
+
+            # 4x4 subdivision grid lines (slightly darker orange)
+            if x % 4 == 0 or y % 4 == 0:
+                r = clamp(r - 25); g = clamp(g - 12); b = clamp(b - 5)
+
+            # Rivet dots at grid intersections
+            if x % 4 == 0 and y % 4 == 0:
+                r = clamp(r + 40); g = clamp(g + 25); b = clamp(b + 10)
+
+            # Noise for brushed metal feel
+            n = random.randint(-8, 8)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
+def generate_toroid_field():
+    """Cyan energy containment panel, 16x16. Semi-translucent glassy look
+    with glowing cross pattern and diagonal highlight."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Deep teal base
+            r, g, b = 0, 0x66, 0x66
+
+            # Bright cyan cross pattern in center (fading to edges)
+            cx = abs(x - 7.5)
+            cy = abs(y - 7.5)
+            # Vertical line
+            if cx < 1.5:
+                fade = max(0, 1.0 - cy / 8.0)
+                r += int(0 * fade)
+                g += int(0x99 * fade)
+                b += int(0x88 * fade)
+            # Horizontal line
+            if cy < 1.5:
+                fade = max(0, 1.0 - cx / 8.0)
+                r += int(0 * fade)
+                g += int(0x99 * fade)
+                b += int(0x88 * fade)
+
+            # Corners darker
+            corner_dist = min(cx, cy)
+            if cx > 5 and cy > 5:
+                r = clamp(r - 20); g = clamp(g - 20); b = clamp(b - 20)
+
+            # 1px bright cyan border
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                r, g, b = 0, 0xff, 0xee
+
+            # Diagonal highlight streak (top-left to center)
+            if abs(x - y) < 2 and x < 9:
+                r = clamp(r + 20); g = clamp(g + 40); b = clamp(b + 35)
+
+            n = random.randint(-5, 5)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 200))
+    return img
+
+
+def generate_plasma_field():
+    """Green glowing plasma conduit, 16x16. Dark green base with bright
+    plasma streaks, tube walls, and spark speckles."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Dark green base
+            r, g, b = 0x1a, 0x66, 0x1a
+
+            # Vertical gradient: center brightest, top/bottom darker (tube shape)
+            cy = abs(y - 7.5)
+            tube_bright = max(0, 1.0 - cy / 7.5)
+            g = clamp(g + int(0x60 * tube_bright))
+            r = clamp(r + int(0x10 * tube_bright))
+
+            # 2px dark border on top and bottom (tube walls)
+            if y < 2 or y > 13:
+                r, g, b = 0x0d, 0x33, 0x0d
+
+            # Plasma streaks (3-4 wavy horizontal lines)
+            for streak_y in [4, 7, 10, 12]:
+                wave = int(1.5 * (((x + streak_y * 3) % 7) / 7.0 - 0.5))
+                if abs(y - streak_y - wave) < 1:
+                    brightness = 0.7 + 0.3 * random.random()
+                    r = clamp(int(0x44 * brightness))
+                    g = clamp(int(0xff * brightness))
+                    b = clamp(int(0x44 * brightness))
+
+            # White/light green speckles for sparking plasma
+            if random.random() < 0.06 and 2 <= y <= 13:
+                r, g, b = 0xaa, 0xff, 0xaa
+
+            n = random.randint(-4, 4)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
+def generate_pole_corrector():
+    """Purple high-energy core, 16x16. Concentric rings radiating from
+    bright center with purple-to-dark gradient."""
+    img = Image.new("RGBA", (16, 16))
+    cx, cy = 7.5, 7.5
+    for y in range(16):
+        for x in range(16):
+            dx = x - cx
+            dy = y - cy
+            dist = (dx*dx + dy*dy) ** 0.5
+
+            # Dark purple background with radial gradient
+            fade = min(1.0, dist / 10.0)
+            r = clamp(int(0x33 + (0x33 - 0x33) * fade))
+            g = clamp(int(0x11 + (0x11 - 0x11) * fade))
+            b = clamp(int(0x55 + (0x55 - 0x55) * fade))
+
+            # Base: dark purple
+            r, g, b = 0x33, 0x11, 0x55
+
+            # 3 concentric rings (bright magenta)
+            for ring_r in [2.5, 4.5, 6.5]:
+                if abs(dist - ring_r) < 0.7:
+                    ring_bright = 1.0 - abs(dist - ring_r) / 0.7
+                    r = clamp(int(r + 0x99 * ring_bright))
+                    g = clamp(int(g + 0x33 * ring_bright))
+                    b = clamp(int(b + 0xaa * ring_bright))
+
+            # Bright center (2x2 pixels)
+            if 7 <= x <= 8 and 7 <= y <= 8:
+                r, g, b = 0xff, 0xaa, 0xff
+
+            # Outermost 1px border
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                r, g, b = 0x66, 0x22, 0x88
+
+            # Radial gradient overlay (center brighter)
+            center_bright = max(0, 1.0 - dist / 9.0) * 0.3
+            r = clamp(int(r + 80 * center_bright))
+            g = clamp(int(g + 30 * center_bright))
+            b = clamp(int(b + 90 * center_bright))
+
+            n = random.randint(-3, 3)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
+def generate_fusion_control_panel():
+    """Pink/magenta control interface, 16x16. Dark grey screen face with
+    magenta border, status LEDs, display lines, and button grid."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Dark grey base (screen/panel face)
+            r, g, b = 0x22, 0x22, 0x22
+
+            # 2px magenta border
+            if x < 2 or x > 13 or y < 2 or y > 13:
+                r, g, b = 0xcc, 0x33, 0x99
+
+            # Top third: status LED dots (y=3..5)
+            if 3 <= y <= 4 and 2 < x < 14:
+                # 4 tiny indicator dots
+                if x == 4:  # green
+                    r, g, b = 0x00, 0xcc, 0x00
+                elif x == 6:  # yellow
+                    r, g, b = 0xcc, 0xcc, 0x00
+                elif x == 8:  # red
+                    r, g, b = 0xcc, 0x00, 0x00
+                elif x == 10:  # blue
+                    r, g, b = 0x00, 0x66, 0xcc
+
+            # Middle section: display readout lines (y=6..8)
+            if y == 7 and 3 <= x <= 12:
+                r, g, b = 0x88, 0x22, 0x66
+            if y == 9 and 3 <= x <= 12:
+                r, g, b = 0x88, 0x22, 0x66
+
+            # Bottom third: button grid (y=11..13)
+            if 11 <= y <= 13 and 2 < x < 14:
+                # 3x2 grid of tiny dark squares
+                bx = (x - 3) % 4
+                by = (y - 11)
+                if bx < 3 and by < 2:
+                    r, g, b = 0x11, 0x11, 0x11
+
+            n = random.randint(-2, 2)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
+def generate_plasma_jumpstarter():
+    """Yellow heavy-duty power input, 16x16. Dark yellow-brown base with
+    bright yellow chevron, conductor bars, and metallic highlights."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Dark yellow-brown base
+            r, g, b = 0x66, 0x55, 0x00
+
+            # Corner pixels darker (industrial housing)
+            if (x < 2 or x > 13) and (y < 2 or y > 13):
+                r = clamp(r - 20); g = clamp(g - 20); b = clamp(b - 5)
+
+            # 1px dark brown border
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                r, g, b = 0x44, 0x33, 0x00
+
+            # Two horizontal bright yellow conductor bars (top and bottom)
+            if (2 <= y <= 3 or 12 <= y <= 13) and 1 <= x <= 14:
+                r, g, b = 0xff, 0xcc, 0x00
+                # Metallic sheen highlights
+                if x % 4 == 0:
+                    r, g, b = 0xff, 0xff, 0xaa
+
+            # Upward-pointing chevron/arrow in center
+            # Arrow shape: gets narrower as y decreases
+            arrow_center = 7.5
+            if 5 <= y <= 10:
+                half_width = (10 - y) * 0.5 + 0.5
+                if abs(x - arrow_center) < half_width:
+                    r, g, b = 0xff, 0xcc, 0x00
+                # Arrow outline
+                if abs(abs(x - arrow_center) - half_width) < 0.8:
+                    r = clamp(r + 30); g = clamp(g + 20)
+
+            n = random.randint(-5, 5)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
+def generate_fusion_power_output():
+    """Brown power output transformer, 16x16. Dark brown base with copper
+    coil pattern (concentric squares), output bus bars, and contact points."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Dark brown base
+            r, g, b = 0x44, 0x22, 0x00
+
+            # 1px dark border
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                r, g, b = 0x33, 0x18, 0x00
+
+            # Two bright orange horizontal bus bars (top and bottom)
+            if (1 <= y <= 2 or 13 <= y <= 14) and 1 <= x <= 14:
+                r, g, b = 0xff, 0x88, 0x00
+
+            # Concentric square coil rings in center (copper/orange)
+            cx, cy_c = abs(x - 7.5), abs(y - 7.5)
+            max_d = max(cx, cy_c)  # Chebyshev distance
+            # 3 nested squares at distances 2, 3.5, 5
+            for ring_d in [2.0, 3.5, 5.0]:
+                if abs(max_d - ring_d) < 0.6:
+                    r, g, b = 0xcc, 0x66, 0x00
+
+            # Bright spots at coil corners (electrical contacts)
+            for sq in [2, 4, 6]:
+                for cx2, cy2 in [(7.5-sq, 7.5-sq), (7.5+sq, 7.5-sq),
+                                 (7.5-sq, 7.5+sq), (7.5+sq, 7.5+sq)]:
+                    if abs(x - cx2) < 0.8 and abs(y - cy2) < 0.8:
+                        r = clamp(r + 60); g = clamp(g + 40); b = clamp(b + 20)
+
+            n = random.randint(-4, 4)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
 def generate_disrupted_space_variants():
     """Generate 20 opacity variants of the disrupted space texture.
 
@@ -365,6 +645,13 @@ def main():
         "lazarus_space_progress_fill.png": generate_progress_fill(),
         "lazarus_space_particle_black.png": generate_particle_black(),
         "lazarus_space_particle_white.png": generate_particle_white(),
+        "lazarus_space_pole_field.png": generate_pole_field(),
+        "lazarus_space_toroid_field.png": generate_toroid_field(),
+        "lazarus_space_plasma_field.png": generate_plasma_field(),
+        "lazarus_space_pole_corrector.png": generate_pole_corrector(),
+        "lazarus_space_fusion_control_panel.png": generate_fusion_control_panel(),
+        "lazarus_space_plasma_jumpstarter.png": generate_plasma_jumpstarter(),
+        "lazarus_space_fusion_power_output.png": generate_fusion_power_output(),
     }
 
     # Add 20 disrupted space opacity variants.
