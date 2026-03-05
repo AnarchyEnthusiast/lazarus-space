@@ -601,6 +601,56 @@ def generate_fusion_power_output():
     return img
 
 
+def generate_reactor_guide():
+    """Book with teal reactor accent, 16x16."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Default transparent
+            r, g, b, a = 0, 0, 0, 0
+
+            # Book silhouette (x=2..14, y=1..14)
+            if 2 <= x <= 14 and 1 <= y <= 14:
+                r, g, b, a = 0x33, 0x33, 0x33, 255
+
+            # Spine (left 2px of book)
+            if 2 <= x <= 3 and 1 <= y <= 14:
+                r, g, b, a = 0x22, 0x22, 0x22, 255
+
+            # Page edges (right side, 1px lighter)
+            if x == 4 and 2 <= y <= 13:
+                r, g, b, a = 0x55, 0x55, 0x55, 255
+
+            # Teal border inset on cover (right, top, bottom)
+            if 5 <= x <= 14 and 1 <= y <= 14:
+                # Top border
+                if y == 2 and 6 <= x <= 13:
+                    r, g, b = 0x00, 0xcc, 0xaa
+                # Bottom border
+                if y == 13 and 6 <= x <= 13:
+                    r, g, b = 0x00, 0xcc, 0xaa
+                # Right border
+                if x == 13 and 3 <= y <= 12:
+                    r, g, b = 0x00, 0xcc, 0xaa
+
+            # Reactor cross/plus symbol in center of cover (3x3 with corners empty)
+            cx, cy = 9, 8
+            if (x == cx and cy - 1 <= y <= cy + 1) or \
+               (y == cy and cx - 1 <= x <= cx + 1):
+                if not (abs(x - cx) == 1 and abs(y - cy) == 1):
+                    r, g, b = 0x00, 0xcc, 0xaa
+
+            # Title accent (bright teal 2px line near top)
+            if y == 4 and 7 <= x <= 11:
+                r, g, b = 0x00, 0xff, 0xcc
+
+            if a > 0:
+                n = random.randint(-2, 2)
+                img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), a))
+
+    return img
+
+
 def generate_disrupted_space_variants():
     """Generate 20 opacity variants of the disrupted space texture.
 
@@ -652,6 +702,7 @@ def main():
         "lazarus_space_fusion_control_panel.png": generate_fusion_control_panel(),
         "lazarus_space_plasma_jumpstarter.png": generate_plasma_jumpstarter(),
         "lazarus_space_fusion_power_output.png": generate_fusion_power_output(),
+        "lazarus_space_reactor_guide.png": generate_reactor_guide(),
     }
 
     # Add 20 disrupted space opacity variants.
