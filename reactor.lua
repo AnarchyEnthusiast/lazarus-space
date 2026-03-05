@@ -526,6 +526,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		-- Activate reactor
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", FUEL_DURATION)
+		meta:set_int("display_accumulator", 0)
 
 		-- Notify power output — update infotext immediately
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -551,6 +552,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", remaining)
 		meta:set_int("remaining_fuel_time", 0)
+		meta:set_int("display_accumulator", 0)
 
 		-- Notify power output
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -671,7 +673,13 @@ local function panel_on_timer(pos, elapsed)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Active ("
 				.. string.format("%d:%02d", mins, secs) .. ")")
 		end
-		meta:set_string("formspec", build_reactor_formspec(pos))
+		-- Only rebuild formspec every 5 seconds (or on depletion)
+		local display_acc = meta:get_int("display_accumulator") + 1
+		if display_acc >= 5 or ft <= 0 then
+			display_acc = 0
+			meta:set_string("formspec", build_reactor_formspec(pos))
+		end
+		meta:set_int("display_accumulator", display_acc)
 		return true
 	end
 
