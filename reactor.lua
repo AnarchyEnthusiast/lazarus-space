@@ -526,7 +526,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		-- Activate reactor
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", FUEL_DURATION)
-		meta:set_int("display_accumulator", 0)
+
 
 		-- Notify power output — update infotext immediately
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -552,7 +552,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", remaining)
 		meta:set_int("remaining_fuel_time", 0)
-		meta:set_int("display_accumulator", 0)
+
 
 		-- Notify power output
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -651,10 +651,12 @@ local function panel_on_timer(pos, elapsed)
 	end
 
 	-- Active reactor: decrement fuel time
+	-- Do NOT rebuild formspec here — async rebuilds steal button clicks.
+	-- Formspec only rebuilds on user actions (on_receive_fields) or state transitions.
 	if state == "active" then
 		local ft = meta:get_int("fuel_time") - 1
 		if ft <= 0 then
-			-- Fuel depleted — shutdown
+			-- Fuel depleted — shutdown (state transition: rebuild formspec)
 			meta:set_string("reactor_state", "standby")
 			meta:set_int("fuel_time", 0)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Standby")
@@ -666,20 +668,15 @@ local function panel_on_timer(pos, elapsed)
 				local po_meta = minetest.get_meta(po_pos)
 				po_meta:set_string("infotext", "Fusion Power Output - Offline")
 			end
+			meta:set_string("formspec", build_reactor_formspec(pos))
 		else
 			meta:set_int("fuel_time", ft)
+			-- Only update infotext (hover text) — does not invalidate open formspec
 			local mins = math.floor(ft / 60)
 			local secs = ft % 60
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Active ("
 				.. string.format("%d:%02d", mins, secs) .. ")")
 		end
-		-- Only rebuild formspec every 5 seconds (or on depletion)
-		local display_acc = meta:get_int("display_accumulator") + 1
-		if display_acc >= 5 or ft <= 0 then
-			display_acc = 0
-			meta:set_string("formspec", build_reactor_formspec(pos))
-		end
-		meta:set_int("display_accumulator", display_acc)
 		return true
 	end
 
@@ -994,7 +991,7 @@ minetest.register_node("lazarus_space:plasma_jumpstarter", {
 		meta:set_int("HV_EU_demand", 0)
 		meta:set_int("HV_EU_input", 0)
 		meta:set_int("stored_energy", 0)
-		meta:set_string("infotext", "Plasma Jumpstarter")
+		meta:set_string("infotext", "Plasma Jumpstarter — 0 / " .. JUMPSTART_ENERGY .. " EU")
 	end,
 
 	after_place_node = function(pos, placer)
@@ -1024,8 +1021,10 @@ minetest.register_node("lazarus_space:plasma_jumpstarter", {
 			meta:set_int("HV_EU_demand", 0)
 		end
 
-		local pct = math.floor(stored / JUMPSTART_ENERGY * 100)
-		meta:set_string("infotext", "Plasma Jumpstarter — " .. pct .. "% charged")
+		local ready = stored >= JUMPSTART_ENERGY
+		meta:set_string("infotext", "Plasma Jumpstarter — "
+			.. stored .. " / " .. JUMPSTART_ENERGY .. " EU"
+			.. (ready and " (Ready)" or ""))
 	end,
 
 	technic_on_disable = function(pos, node)
