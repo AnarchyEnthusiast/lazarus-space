@@ -380,13 +380,9 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 			-- Start integrity check timer
 			local timer = minetest.get_node_timer(pos)
 			timer:start(1)
-			minetest.show_formspec(sender:get_player_name(),
-				"lazarus_space:fusion_panel_" .. minetest.pos_to_string(pos),
-				build_reactor_formspec(pos))
+			meta:set_string("formspec", build_reactor_formspec(pos))
 		else
-			minetest.show_formspec(sender:get_player_name(),
-				"lazarus_space:fusion_panel_" .. minetest.pos_to_string(pos),
-				build_error_formspec(result))
+			meta:set_string("formspec", build_error_formspec(result))
 		end
 		return
 	end
@@ -421,9 +417,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		js_meta:set_int("stored_energy", math.max(0, stored - JUMPSTART_ENERGY))
 
 		-- Timer is already running from validation
-		minetest.show_formspec(sender:get_player_name(),
-			"lazarus_space:fusion_panel_" .. minetest.pos_to_string(pos),
-			build_reactor_formspec(pos))
+		meta:set_string("formspec", build_reactor_formspec(pos))
 		return
 	end
 
@@ -448,9 +442,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 			po_meta:set_int("active", 1)
 		end
 
-		minetest.show_formspec(sender:get_player_name(),
-			"lazarus_space:fusion_panel_" .. minetest.pos_to_string(pos),
-			build_reactor_formspec(pos))
+		meta:set_string("formspec", build_reactor_formspec(pos))
 		return
 	end
 
@@ -484,6 +476,7 @@ local function panel_on_timer(pos, elapsed)
 					local po_meta = minetest.get_meta(po_pos)
 					po_meta:set_int("active", 0)
 				end
+				meta:set_string("formspec", build_unchecked_formspec())
 				return false -- stop timer
 			end
 		end
@@ -507,6 +500,7 @@ local function panel_on_timer(pos, elapsed)
 			meta:set_string("reactor_state", "standby")
 			meta:set_int("charge_timer", 0)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Charge Failed: Fuel Removed")
+			meta:set_string("formspec", build_reactor_formspec(pos))
 			return true
 		end
 
@@ -518,6 +512,7 @@ local function panel_on_timer(pos, elapsed)
 			meta:set_int("charge_timer", ct)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Charging... " .. ct .. "s")
 		end
+		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
 	end
 
@@ -544,6 +539,7 @@ local function panel_on_timer(pos, elapsed)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Active ("
 				.. string.format("%d:%02d", mins, secs) .. ")")
 		end
+		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
 	end
 
@@ -700,6 +696,7 @@ minetest.register_node("lazarus_space:fusion_control_panel", {
 		meta:set_string("validated", "")
 		meta:set_string("power_tier", "HV")
 		meta:set_string("infotext", "Magnetic Fusion Reactor — Not Validated")
+		meta:set_string("formspec", build_unchecked_formspec())
 	end,
 
 	after_place_node = function(pos, placer)
@@ -712,19 +709,6 @@ minetest.register_node("lazarus_space:fusion_control_panel", {
 					"Control panel must be placed touching a toroid field block.")
 			end
 			return
-		end
-	end,
-
-	on_rightclick = function(pos, node, clicker)
-		local meta = minetest.get_meta(pos)
-		local validated = meta:get_string("validated")
-		local name = clicker:get_player_name()
-		local fs_name = "lazarus_space:fusion_panel_" .. minetest.pos_to_string(pos)
-
-		if validated == "true" then
-			minetest.show_formspec(name, fs_name, build_reactor_formspec(pos))
-		else
-			minetest.show_formspec(name, fs_name, build_unchecked_formspec())
 		end
 	end,
 
@@ -748,22 +732,20 @@ minetest.register_node("lazarus_space:fusion_control_panel", {
 		return 0
 	end,
 
+	allow_metadata_inventory_take = function(pos, listname, index, stack)
+		return stack:get_count()
+	end,
+
 	on_metadata_inventory_put = function(pos)
-		-- Refresh formspec if someone has it open
+		local meta = minetest.get_meta(pos)
+		meta:set_string("formspec", build_reactor_formspec(pos))
+	end,
+
+	on_metadata_inventory_take = function(pos)
+		local meta = minetest.get_meta(pos)
+		meta:set_string("formspec", build_reactor_formspec(pos))
 	end,
 })
-
--- Register formspec handler for the control panel
-minetest.register_on_player_receive_fields(function(player, formname, fields)
-	if not formname:find("^lazarus_space:fusion_panel_") then return false end
-	local pos_str = formname:sub(#"lazarus_space:fusion_panel_" + 1)
-	local pos = minetest.string_to_pos(pos_str)
-	if not pos then return false end
-	local node = minetest.get_node(pos)
-	if node.name ~= "lazarus_space:fusion_control_panel" then return false end
-	panel_on_receive_fields(pos, formname, fields, player)
-	return true
-end)
 
 -- ---- Plasma Jumpstarter ----
 minetest.register_node("lazarus_space:plasma_jumpstarter", {
