@@ -1,5 +1,5 @@
 -- Lazarus Space: Magnetic Fusion Reactor
--- 13x13x5 multiblock structure with charge sequence and power output.
+-- 13x13x5 multiblock structure with jump start sequence and power output.
 
 -- ============================================================
 -- CONSTANTS
@@ -243,11 +243,18 @@ end
 -- FORMSPEC BUILDERS
 -- ============================================================
 
--- Helper: render a button with a symmetric colored backdrop (0.1 padding)
+-- Helper: render a button with a thin border outline (no filled backdrop)
 local function btn(fs, x, y, w, h, name, label, color)
-	local p = 0.1
-	fs = fs .. "box[" .. (x-p) .. "," .. (y-p) .. ";" .. (w+p*2) .. "," .. (h+p*2) .. ";" .. color .. "]"
-		.. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
+	local t = 0.05
+	-- Top edge
+	fs = fs .. "box[" .. (x-t) .. "," .. (y-t) .. ";" .. (w+t*2) .. "," .. t .. ";" .. color .. "]"
+	-- Bottom edge
+	fs = fs .. "box[" .. (x-t) .. "," .. (y+h) .. ";" .. (w+t*2) .. "," .. t .. ";" .. color .. "]"
+	-- Left edge
+	fs = fs .. "box[" .. (x-t) .. "," .. (y-t) .. ";" .. t .. "," .. (h+t*2) .. ";" .. color .. "]"
+	-- Right edge
+	fs = fs .. "box[" .. (x+w) .. "," .. (y-t) .. ";" .. t .. "," .. (h+t*2) .. ";" .. color .. "]"
+	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
 	return fs
 end
 
@@ -337,10 +344,10 @@ local function build_reactor_formspec(pos)
 	local status_text
 	if state == "standby" then
 		status_text = minetest.colorize("#ffcc00", "STANDBY")
-	elseif state == "charging" then
-		status_text = minetest.colorize("#ff8800", "CHARGING")
-	elseif state == "charged" then
-		status_text = minetest.colorize("#00ccff", "CHARGED - READY")
+	elseif state == "jump_starting" then
+		status_text = minetest.colorize("#ff8800", "JUMP STARTING")
+	elseif state == "jump_started" then
+		status_text = minetest.colorize("#00ccff", "JUMP START COMPLETE")
 	elseif state == "active" then
 		status_text = minetest.colorize("#00ff66", "ACTIVE")
 	elseif state == "shutdown" then
@@ -349,14 +356,13 @@ local function build_reactor_formspec(pos)
 		status_text = state
 	end
 
-	-- Charge progress
-	local charge_progress = 0
-	if state == "charging" then
-		charge_progress = math.floor((CHARGE_TIME - charge_timer) / CHARGE_TIME * 100)
-	elseif state == "charged" or state == "active" then
-		charge_progress = 100
+	-- Jump start progress
+	local js_progress = 0
+	if state == "jump_starting" then
+		js_progress = math.floor((CHARGE_TIME - charge_timer) / CHARGE_TIME * 100)
+	elseif state == "jump_started" or state == "active" then
+		js_progress = 100
 	end
-	local charge_fill = 7.8 * charge_progress / 100
 
 	local fs = "size[9,10.5]"
 		.. "bgcolor[#080808;true]"
@@ -368,8 +374,8 @@ local function build_reactor_formspec(pos)
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[0.3,1.1;Status: " .. status_text .. "]"
 	-- Progress bar with gradient
-	fs = gradient_bar(fs, 0.5, 1.8, 7.8, 0.5, charge_progress)
-	fs = fs .. "label[8.5,1.9;" .. charge_progress .. "%]"
+	fs = gradient_bar(fs, 0.5, 1.8, 7.8, 0.5, js_progress)
+	fs = fs .. "label[8.5,1.9;" .. js_progress .. "%]"
 
 	-- Fuel section
 	fs = fs .. "box[0,2.5;8.8,1.8;#0d0d1a]"
@@ -406,14 +412,14 @@ local function build_reactor_formspec(pos)
 	-- Control buttons
 	if state == "standby" then
 		if hv_ready then
-			fs = btn(fs, 2.5, 5.8, 4, 0.7, "charge", "Charge", "#00ccaa")
+			fs = btn(fs, 2.5, 5.8, 4, 0.7, "jump_start", "Jump Start", "#00ccaa")
 		else
-			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Charge (HV not ready)") .. "]"
+			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Jump Start (HV not ready)") .. "]"
 		end
-	elseif state == "charging" then
+	elseif state == "jump_starting" then
 		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
-			"Charging... " .. charge_timer .. "s") .. "]"
-	elseif state == "charged" then
+			"Jump Starting... " .. charge_timer .. "s") .. "]"
+	elseif state == "jump_started" then
 		if fuel_count >= FUEL_SLOTS then
 			fs = btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start", "#00ff66")
 		else
@@ -456,18 +462,18 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		return
 	end
 
-	if fields.charge then
+	if fields.jump_start then
 		local state = meta:get_string("reactor_state")
 		if state ~= "standby" then return end
 
-		-- Verify HV power (fuel not required for charging)
+		-- Verify HV power (fuel not required for jump start)
 		local js_pos = find_neighbor(pos, "lazarus_space:plasma_jumpstarter")
 		if not js_pos then return end
 		local js_meta = minetest.get_meta(js_pos)
 		if js_meta:get_int("stored_energy") < JUMPSTART_ENERGY then return end
 
-		-- Start charge sequence
-		meta:set_string("reactor_state", "charging")
+		-- Start jump start sequence
+		meta:set_string("reactor_state", "jump_starting")
 		meta:set_int("charge_timer", CHARGE_TIME)
 
 		-- Drain jumpstarter energy
@@ -481,7 +487,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 
 	if fields.inject then
 		local state = meta:get_string("reactor_state")
-		if state ~= "charged" then return end
+		if state ~= "jump_started" then return end
 
 		-- Verify all fuel rods are loaded
 		local inv = meta:get_inventory()
@@ -554,17 +560,17 @@ local function panel_on_timer(pos, elapsed)
 		meta:set_float("check_accumulator", check_acc)
 	end
 
-	-- Charging countdown (fuel not required during charging)
-	if state == "charging" then
+	-- Jump start countdown (fuel not required during jump start)
+	if state == "jump_starting" then
 		local ct = meta:get_int("charge_timer") - 1
 
 		if ct <= 0 then
-			meta:set_string("reactor_state", "charged")
+			meta:set_string("reactor_state", "jump_started")
 			meta:set_int("charge_timer", 0)
-			meta:set_string("infotext", "Magnetic Fusion Reactor — Charged")
+			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Start Complete")
 		else
 			meta:set_int("charge_timer", ct)
-			meta:set_string("infotext", "Magnetic Fusion Reactor — Charging... " .. ct .. "s")
+			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Starting... " .. ct .. "s")
 		end
 		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
@@ -597,7 +603,7 @@ local function panel_on_timer(pos, elapsed)
 		return true
 	end
 
-	-- Standby or charged: refresh formspec for live HV status polling
+	-- Standby or jump_started: refresh formspec for live HV status polling
 	if meta:get_string("validated") == "true" then
 		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
@@ -651,51 +657,47 @@ minetest.register_node("lazarus_space:plasma_field", {
 	sounds = default.node_sound_metal_defaults(),
 
 	after_place_node = function(pos, placer, itemstack, pointed_thing)
-		-- Auto-corner logic: check perpendicular neighbors
-		local node = minetest.get_node(pos)
-		local dir = minetest.facedir_to_dir(node.param2)
-		-- The tube runs along the axis defined by facedir
-		-- facedir 0 = +Z, 1 = +X, 2 = -Z, 3 = -X
-		local horiz_dirs = {
+		-- Auto-corner logic: if the newly placed piece has two perpendicular
+		-- plasma field neighbors, convert it to a corner piece.
+		local PF = "lazarus_space:plasma_field"
+		local PFC = "lazarus_space:plasma_field_corner"
+		local horiz = {
 			{x=1,y=0,z=0}, {x=-1,y=0,z=0},
 			{x=0,y=0,z=1}, {x=0,y=0,z=-1},
 		}
 
-		for _, d in ipairs(horiz_dirs) do
+		-- Collect which directions have plasma field neighbors
+		local has_x_pos, has_x_neg, has_z_pos, has_z_neg = false, false, false, false
+		for _, d in ipairs(horiz) do
 			local npos = vector.add(pos, d)
-			local nnode = minetest.get_node(npos)
-			if nnode.name == "lazarus_space:plasma_field"
-				or nnode.name == "lazarus_space:plasma_field_corner" then
-				-- Check if the neighbor runs on a different axis
-				local ndir = minetest.facedir_to_dir(nnode.param2)
-				-- If axes are perpendicular, convert the newly placed piece
-				-- to a corner at the junction
-				local my_axis = (node.param2 % 4) % 2 -- 0=Z-axis, 1=X-axis
-				local n_axis = (nnode.param2 % 4) % 2
-
-				if my_axis ~= n_axis and nnode.name == "lazarus_space:plasma_field" then
-					-- Determine corner orientation
-					-- The corner connects the two perpendicular directions
-					-- We convert the current node to a corner piece
-					-- Corner facedir: 0=NE, 1=SE, 2=SW, 3=NW (approximate)
-					local corner_param2 = 0
-					if d.x == 1 and my_axis == 0 then corner_param2 = 0
-					elseif d.x == 1 and my_axis == 1 then corner_param2 = 1
-					elseif d.x == -1 and my_axis == 0 then corner_param2 = 3
-					elseif d.x == -1 and my_axis == 1 then corner_param2 = 2
-					elseif d.z == 1 and my_axis == 1 then corner_param2 = 0
-					elseif d.z == 1 and my_axis == 0 then corner_param2 = 3
-					elseif d.z == -1 and my_axis == 1 then corner_param2 = 1
-					elseif d.z == -1 and my_axis == 0 then corner_param2 = 2
-					end
-
-					minetest.set_node(pos, {
-						name = "lazarus_space:plasma_field_corner",
-						param2 = corner_param2,
-					})
-					break
+			local nn = minetest.get_node(npos).name
+			if nn == PF or nn == PFC then
+				if d.x == 1 then has_x_pos = true
+				elseif d.x == -1 then has_x_neg = true
+				elseif d.z == 1 then has_z_pos = true
+				elseif d.z == -1 then has_z_neg = true
 				end
 			end
+		end
+
+		-- Need at least one X-axis and one Z-axis neighbor for a corner
+		local has_x = has_x_pos or has_x_neg
+		local has_z = has_z_pos or has_z_neg
+		if has_x and has_z then
+			-- Pick the first X and Z neighbor to determine corner orientation
+			-- Corner nodebox arms: one arm along -X, other along +Z (at facedir 0)
+			-- facedir rotations: 0=arms(-X,+Z), 1=arms(-Z,-X), 2=arms(+X,-Z), 3=arms(+Z,+X)
+			local corner_param2 = 0
+			if has_x_neg and has_z_pos then corner_param2 = 0      -- -X, +Z
+			elseif has_x_neg and has_z_neg then corner_param2 = 1  -- -X, -Z
+			elseif has_x_pos and has_z_neg then corner_param2 = 2  -- +X, -Z
+			elseif has_x_pos and has_z_pos then corner_param2 = 3  -- +X, +Z
+			end
+
+			minetest.set_node(pos, {
+				name = PFC,
+				param2 = corner_param2,
+			})
 		end
 	end,
 })
