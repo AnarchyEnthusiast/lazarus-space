@@ -243,42 +243,18 @@ end
 -- FORMSPEC BUILDERS
 -- ============================================================
 
--- Helper: render a button with a centered thin border outline
--- Calibrated offsets measured from red-box overlay test (see CALIBRATION below).
--- Each offset = distance from formspec coord to visible button edge.
--- To recalibrate: temporarily use build_calibration_formspec() on the control panel,
--- compare red box edges to button edges in-game, adjust values, then restore.
-local BTN_LEFT  = -0.05   -- border left edge relative to button x
-local BTN_TOP   = -0.05   -- border top edge relative to button y
-local BTN_RIGHT = -0.15   -- border right edge relative to button x+w
-local BTN_BOT   = -0.05   -- border bottom edge relative to button y+h
-
-local function btn(fs, x, y, w, h, name, label, color)
-	local t = 0.05
-	local lx = x + BTN_LEFT
-	local ty = y + BTN_TOP
-	local bw = w + BTN_RIGHT - BTN_LEFT
-	local bh = h + BTN_BOT - BTN_TOP
-	-- Top edge
-	fs = fs .. "box[" .. lx .. "," .. ty .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
-	-- Bottom edge
-	fs = fs .. "box[" .. lx .. "," .. (ty + bh) .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
-	-- Left edge
-	fs = fs .. "box[" .. lx .. "," .. ty .. ";" .. t .. "," .. bh .. ";" .. color .. "]"
-	-- Right edge
-	fs = fs .. "box[" .. (lx + bw) .. "," .. ty .. ";" .. t .. "," .. bh .. ";" .. color .. "]"
+-- Helper: style[] + button[] for colored buttons (no border boxes)
+local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, text)
+	text = text or "#ffffff"
+	bg_hover = bg_hover or bg
+	bg_press = bg_press or bg
+	fs = fs .. "style[" .. name .. ";bgcolor=" .. bg
+		.. ";bgcolor_hovered=" .. bg_hover
+		.. ";bgcolor_pressed=" .. bg_press
+		.. ";textcolor=" .. text .. "]"
 	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
 	return fs
 end
-
--- CALIBRATION: Uncomment this function and use it as the control panel formspec
--- to measure the exact offset between box edges and button edges in-game.
--- local function build_calibration_formspec()
--- 	return "size[6,4]"
--- 		.. "bgcolor[#080808;true]"
--- 		.. "box[2,1.5;2,1;#ff0000]"
--- 		.. "button[2,1.5;2,1;test;Test Button]"
--- end
 
 -- Helper: render a gradient progress bar (3-strip: bright top, base middle, dark bottom)
 -- Strips overlap by 0.02 units to prevent black lines from floating point gaps.
@@ -311,7 +287,8 @@ local function build_unchecked_formspec()
 		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[2.5,1.1;Structure Check Required]"
-	fs = btn(fs, 2.5, 2.2, 4, 0.7, "check_structure", "Check Structure", "#00ccaa")
+	fs = styled_btn(fs, 2.5, 2.2, 4, 0.7, "check_structure", "Check Structure",
+		"#00ccaa", "#00ddbb", "#009988")
 	return fs
 end
 
@@ -331,7 +308,8 @@ local function build_error_formspec(errors)
 		y = y + 0.5
 	end
 
-	fs = btn(fs, 2.5, y + 0.3, 4, 0.7, "check_structure", "Retry Check", "#00ccaa")
+	fs = styled_btn(fs, 2.5, y + 0.3, 4, 0.7, "check_structure", "Retry Check",
+		"#00ccaa", "#00ddbb", "#009988")
 	return fs
 end
 
@@ -436,9 +414,11 @@ local function build_reactor_formspec(pos)
 	-- Control buttons
 	if state == "standby" then
 		if hv_ready then
-			fs = btn(fs, 2.5, 5.8, 4, 0.7, "jump_start", "Jump Start", "#00ccaa")
+			fs = styled_btn(fs, 2.5, 5.8, 4, 0.7, "jump_start", "Jump Start",
+				"#00ccaa", "#00ddbb", "#009988")
 		else
-			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Jump Start (HV not ready)") .. "]"
+			fs = styled_btn(fs, 2.5, 5.8, 4, 0.7, "jump_start_disabled",
+				"Jump Start (HV not ready)", "#333333", "#333333", "#333333", "#666666")
 		end
 	elseif state == "jump_starting" then
 		local js_elapsed = meta:get_float("js_elapsed")
@@ -449,15 +429,19 @@ local function build_reactor_formspec(pos)
 		local remaining = meta:get_int("remaining_fuel_time")
 		if remaining > 0 then
 			-- Resume with stored fuel time — no rods needed
-			fs = btn(fs, 1.5, 5.8, 6, 0.7, "resume", "Resume Reactor", "#00ff66")
+			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "resume", "Resume Reactor",
+				"#00cc66", "#00dd77", "#009955")
 		elseif filled_slots >= FUEL_SLOTS then
-			fs = btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start", "#00ff66")
+			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start",
+				"#00cc66", "#00dd77", "#009955")
 		else
-			fs = fs .. "label[1.5,5.9;" .. minetest.colorize("#666666",
-				"Inject Fuel & Start (need 1 rod in each of " .. FUEL_SLOTS .. " slots)") .. "]"
+			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject_disabled",
+				"Need 1 rod in each of " .. FUEL_SLOTS .. " slots",
+				"#333333", "#333333", "#333333", "#666666")
 		end
 	elseif state == "active" then
-		fs = btn(fs, 2.0, 7.0, 5, 0.7, "deactivate", "Deactivate Reactor", "#cc3333")
+		fs = styled_btn(fs, 2.0, 7.0, 5, 0.7, "deactivate", "Deactivate Reactor",
+			"#cc3333", "#dd4444", "#aa2222")
 	end
 
 	-- Player inventory
@@ -1119,9 +1103,15 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 		local tiers = {{"LV", 0.3}, {"MV", 2.1}, {"HV", 3.9}}
 		for _, t in ipairs(tiers) do
-			local name, x = t[1], t[2]
-			local color = tier == name and "#00ccaa" or "#1a1a2e"
-			fs = btn(fs, x, 2.4, 1.5, 0.7, "set_" .. name:lower(), name, color)
+			local tname, tx = t[1], t[2]
+			local btn_name = "set_" .. tname:lower()
+			if tier == tname then
+				fs = styled_btn(fs, tx, 2.4, 1.5, 0.7, btn_name, tname,
+					"#00ccaa", "#00ddbb", "#009988")
+			else
+				fs = styled_btn(fs, tx, 2.4, 1.5, 0.7, btn_name, tname,
+					"#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
+			end
 		end
 
 		-- Output info
