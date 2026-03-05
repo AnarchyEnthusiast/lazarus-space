@@ -1,5 +1,6 @@
 -- Lazarus Space: Magnetic Fusion Reactor Build Guide
--- 9-page craftable guide book with colored grid blueprints and side-view cross-sections.
+-- 9-page craftable guide book with colored grid blueprints, side-view
+-- cross-sections, and interactive 3D model viewers.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -162,6 +163,34 @@ local function draw_side_view(fs, page, start_x, start_y, cell_size)
 end
 
 -- ============================================================
+-- 3D MODEL HELPER
+-- ============================================================
+
+local PAGE_MODELS = {
+	[2] = "reactor_layer_floor.obj",
+	[3] = "reactor_layer_walls.obj",
+	[4] = "reactor_layer_middle.obj",
+	[5] = "reactor_layer_middle.obj",
+	[6] = "reactor_layer_roof.obj",
+	[9] = "reactor_complete.obj",
+}
+
+local MODEL_TEXTURES = "lazarus_space_pole_field.png,"
+	.. "lazarus_space_toroid_field.png,"
+	.. "default_steel_block.png,"
+	.. "lazarus_space_plasma_field.png,"
+	.. "lazarus_space_pole_corrector.png"
+
+local function add_model(fs, page, x, y, w, h)
+	local mesh = PAGE_MODELS[page]
+	if not mesh then return fs end
+	fs = fs .. "model[" .. x .. "," .. y .. ";" .. w .. "," .. h
+		.. ";reactor_preview;" .. mesh .. ";" .. MODEL_TEXTURES
+		.. ";20,-30;false;true]"
+	return fs
+end
+
+-- ============================================================
 -- PAGE 1: INTRODUCTION
 -- ============================================================
 
@@ -230,25 +259,30 @@ local GRID_FLOOR = {
 local function build_page_floor(fs)
 	fs = page_header(fs, "Step 1: Base Platform (Bottom Layer)")
 
-	-- Top View label
-	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
+	-- Top View label (left side)
+	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	-- 13x13 grid, cell_size 0.25
-	local cell = 0.25
+	-- 3D View label (right side)
+	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- 13x13 grid on the left, cell_size 0.20
+	local cell = 0.20
 	local gap = 0.02
 	local step = cell + gap
-	local grid_w = 13 * step
-	local start_x = (9 - grid_w) / 2
+	local start_x = 0.3
 	local start_y = 1.3
 	fs = draw_grid(fs, GRID_FLOOR, start_x, start_y, cell, gap)
 
+	-- 3D model on the right
+	fs = add_model(fs, 2, 4.0, 1.1, 4.5, 4.0)
+
 	-- Side View label
-	local side_label_y = start_y + 13 * step + 0.24
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+	local side_label_y = 5.25
+	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
 
 	-- Side-view cross-section
 	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
+	local side_cell = 0.18
 	local side_step = side_cell + 0.02
 	local side_w = 13 * side_step
 	local side_x = (9 - side_w) / 2
@@ -294,25 +328,30 @@ local GRID_WALLS = {
 local function build_page_walls(fs)
 	fs = page_header(fs, "Step 2: Walls (Layers 2 & 4)")
 
-	-- Top View label
-	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
+	-- Top View label (left side)
+	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	-- 13x13 grid, cell_size 0.25
-	local cell = 0.25
+	-- 3D View label (right side)
+	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- 13x13 grid on the left, cell_size 0.20
+	local cell = 0.20
 	local gap = 0.02
 	local step = cell + gap
-	local grid_w = 13 * step
-	local start_x = (9 - grid_w) / 2
+	local start_x = 0.3
 	local start_y = 1.3
 	fs = draw_grid(fs, GRID_WALLS, start_x, start_y, cell, gap)
 
+	-- 3D model on the right
+	fs = add_model(fs, 3, 4.0, 1.1, 4.5, 4.0)
+
 	-- Side View label
-	local side_label_y = start_y + 13 * step + 0.24
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+	local side_label_y = 5.25
+	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
 
 	-- Side-view cross-section
 	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
+	local side_cell = 0.18
 	local side_step = side_cell + 0.02
 	local side_w = 13 * side_step
 	local side_x = (9 - side_w) / 2
@@ -353,25 +392,30 @@ local GRID_CORE = {
 local function build_page_core(fs)
 	fs = page_header(fs, "Step 3: Reactor Core (Middle Layer Center)")
 
-	-- Top View label
-	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
+	-- Top View label (left side)
+	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	-- 7x7 grid, cell_size 0.45
-	local cell = 0.45
+	-- 3D View label (right side)
+	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- 7x7 zoomed grid on the left, cell_size 0.38
+	local cell = 0.38
 	local gap = 0.02
 	local step = cell + gap
-	local grid_w = 7 * step
-	local start_x = (9 - grid_w) / 2
+	local start_x = 0.3
 	local start_y = 1.3
 	fs = draw_grid(fs, GRID_CORE, start_x, start_y, cell, gap)
 
+	-- 3D model on the right (full middle layer)
+	fs = add_model(fs, 4, 4.0, 1.1, 4.5, 4.0)
+
 	-- Side View label
-	local side_label_y = start_y + 7 * step + 0.24
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+	local side_label_y = 5.25
+	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
 
 	-- Side-view cross-section
 	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
+	local side_cell = 0.18
 	local side_step = side_cell + 0.02
 	local side_w = 13 * side_step
 	local side_x = (9 - side_w) / 2
@@ -419,25 +463,30 @@ local GRID_PLASMA = {
 local function build_page_plasma(fs)
 	fs = page_header(fs, "Step 4: Plasma Ring (Middle Layer Full)")
 
-	-- Top View label
-	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
+	-- Top View label (left side)
+	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	-- 13x13 grid, cell_size 0.25
-	local cell = 0.25
+	-- 3D View label (right side)
+	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- 13x13 grid on the left, cell_size 0.20
+	local cell = 0.20
 	local gap = 0.02
 	local step = cell + gap
-	local grid_w = 13 * step
-	local start_x = (9 - grid_w) / 2
+	local start_x = 0.3
 	local start_y = 1.3
 	fs = draw_grid(fs, GRID_PLASMA, start_x, start_y, cell, gap)
 
+	-- 3D model on the right
+	fs = add_model(fs, 5, 4.0, 1.1, 4.5, 4.0)
+
 	-- Side View label
-	local side_label_y = start_y + 13 * step + 0.24
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+	local side_label_y = 5.25
+	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
 
 	-- Side-view cross-section
 	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
+	local side_cell = 0.18
 	local side_step = side_cell + 0.02
 	local side_w = 13 * side_step
 	local side_x = (9 - side_w) / 2
@@ -486,25 +535,30 @@ local GRID_ROOF = {
 local function build_page_roof(fs)
 	fs = page_header(fs, "Step 5: Roof (Top Layer)")
 
-	-- Top View label
-	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
+	-- Top View label (left side)
+	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	-- 13x13 grid, cell_size 0.25
-	local cell = 0.25
+	-- 3D View label (right side)
+	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- 13x13 grid on the left, cell_size 0.20
+	local cell = 0.20
 	local gap = 0.02
 	local step = cell + gap
-	local grid_w = 13 * step
-	local start_x = (9 - grid_w) / 2
+	local start_x = 0.3
 	local start_y = 1.3
 	fs = draw_grid(fs, GRID_ROOF, start_x, start_y, cell, gap)
 
+	-- 3D model on the right
+	fs = add_model(fs, 6, 4.0, 1.1, 4.5, 4.0)
+
 	-- Side View label
-	local side_label_y = start_y + 13 * step + 0.24
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+	local side_label_y = 5.25
+	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
 
 	-- Side-view cross-section
 	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
+	local side_cell = 0.18
 	local side_step = side_cell + 0.02
 	local side_w = 13 * side_step
 	local side_x = (9 - side_w) / 2
@@ -526,7 +580,7 @@ local function build_page_roof(fs)
 end
 
 -- ============================================================
--- PAGE 7: CONTROL BLOCKS (reworked — horizontal layout with side view)
+-- PAGE 7: CONTROL BLOCKS (horizontal layout with side view)
 -- ============================================================
 
 local GRID_CONTROL = {
@@ -648,32 +702,19 @@ local function build_page_startup(fs)
 end
 
 -- ============================================================
--- PAGE 9: COMPLETE STRUCTURE — EXPLODED VIEW
+-- PAGE 9: COMPLETE STRUCTURE — INTERACTIVE 3D MODEL
 -- ============================================================
 
-local EXPLODED_LAYERS = {
-	{grid = GRID_FLOOR,  label = "Floor (y=-2)"},
-	{grid = GRID_WALLS,  label = "Wall (y=-1)"},
-	{grid = GRID_PLASMA, label = "Middle (y=0)"},
-	{grid = GRID_WALLS,  label = "Wall (y=+1)"},
-	{grid = GRID_ROOF,   label = "Roof (y=+2)"},
-}
-
 local function build_page_complete(fs)
-	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 Exploded View")
+	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 3D View")
 
-	local base_x = 1.2
-	local base_y = 6.8
+	-- Large interactive 3D model of the full reactor
+	fs = fs .. "model[0.5,1.3;8.0,6.5;reactor_preview;"
+		.. "reactor_complete.obj;" .. MODEL_TEXTURES
+		.. ";25,-45;false;true]"
 
-	for i, layer in ipairs(EXPLODED_LAYERS) do
-		local offset = i - 1
-		local lx = base_x + offset * 0.30
-		local ly = base_y - offset * 0.40
-		fs = draw_grid(fs, layer.grid, lx, ly, 0.12, 0.01)
-		-- Label to the right of each layer
-		fs = fs .. "label[" .. (lx + 1.85) .. "," .. (ly + 0.8) .. ";"
-			.. minetest.colorize("#aaaaaa", layer.label) .. "]"
-	end
+	-- Rotate hint
+	fs = fs .. "label[2.8,7.95;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
 
 	-- Condensed legend
 	local legend_y = 8.3
@@ -687,7 +728,7 @@ local function build_page_complete(fs)
 
 	-- Note
 	fs = fs .. "label[0.6,8.75;"
-		.. minetest.formspec_escape("5 layers from bottom to top. Build from the base up.") .. "]"
+		.. minetest.formspec_escape("5 layers, 13x13 cross shape. Build from the base up.") .. "]"
 
 	return fs
 end
