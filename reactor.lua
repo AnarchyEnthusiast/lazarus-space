@@ -244,28 +244,34 @@ end
 -- ============================================================
 
 local function build_unchecked_formspec()
-	return "size[8,4]"
+	return "size[9,4]"
 		.. "bgcolor[#080808;true]"
-		.. "label[3,0.5;Magnetic Fusion Reactor]"
-		.. "label[2,1.5;Structure Check Required]"
-		.. "button[2.5,2.5;3,1;check_structure;Check Structure]"
+		.. "box[0,0;8.8,0.8;#1a1a2e]"
+		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		.. "box[0,1;8.8,0.6;#0a0a15]"
+		.. "label[2.5,1.1;Structure Check Required]"
+		.. "box[2.5,2.2;4,0.7;#00ccaa]"
+		.. "button[2.5,2.2;4,0.7;check_structure;Check Structure]"
 end
 
 local function build_error_formspec(errors)
-	local fs = "size[8,7]"
+	local fs = "size[9,7]"
 		.. "bgcolor[#080808;true]"
-		.. "label[2.5,0.5;Magnetic Fusion Reactor]"
-		.. "label[1.5,1;Structure Check Failed:]"
+		.. "box[0,0;8.8,0.8;#1a1a2e]"
+		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		.. "box[0,1;8.8,0.6;#0a0a15]"
+		.. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "Structure Check Failed") .. "]"
 
-	local y = 1.5
+	local y = 2.0
 	for i, err in ipairs(errors) do
 		if i > 6 then break end
-		fs = fs .. "label[0.5," .. y .. "; - " ..
-			minetest.formspec_escape(err) .. "]"
+		fs = fs .. "label[0.5," .. y .. ";" .. minetest.colorize("#ff8888",
+			"- " .. minetest.formspec_escape(err)) .. "]"
 		y = y + 0.5
 	end
 
-	fs = fs .. "button[2.5," .. (y + 0.5) .. ";3,1;check_structure;Retry Check]"
+	fs = fs .. "box[2.5," .. (y + 0.3) .. ";4,0.7;#00ccaa]"
+		.. "button[2.5," .. (y + 0.3) .. ";4,0.7;check_structure;Retry Check]"
 	return fs
 end
 
@@ -307,55 +313,100 @@ local function build_reactor_formspec(pos)
 		if tier ~= "" then power_tier = tier end
 	end
 
-	-- State label
-	local state_label
+	-- Status text with color
+	local status_text
 	if state == "standby" then
-		state_label = "Standby"
+		status_text = minetest.colorize("#ffcc00", "STANDBY")
 	elseif state == "charging" then
-		state_label = "Charging... " .. charge_timer .. "s"
+		status_text = minetest.colorize("#ff8800", "CHARGING")
 	elseif state == "charged" then
-		state_label = "Charged - Ready to Inject"
+		status_text = minetest.colorize("#00ccff", "CHARGED - READY")
 	elseif state == "active" then
-		state_label = "Active"
+		status_text = minetest.colorize("#00ff66", "ACTIVE")
 	elseif state == "shutdown" then
-		state_label = "Shutdown"
+		status_text = minetest.colorize("#ff3333", "SHUTDOWN")
 	else
-		state_label = state
+		status_text = state
 	end
 
-	local fs = "size[8,9]"
-		.. "bgcolor[#080808;true]"
-		-- Title and status
-		.. "label[2.5,0;Magnetic Fusion Reactor]"
-		.. "label[0.5,0.5;Status: " .. state_label .. "]"
-		-- Fuel inventory
-		.. "label[1,1.5;Fuel Rods (" .. fuel_count .. "/" .. FUEL_SLOTS .. ")]"
-		.. "list[context;fuel;1,2;6,1;]"
-		-- HV Power status
-		.. "label[0.5,3;HV Power: " .. (hv_ready and "Ready" or "Insufficient") .. "]"
+	-- Charge progress
+	local charge_progress = 0
+	if state == "charging" then
+		charge_progress = math.floor((CHARGE_TIME - charge_timer) / CHARGE_TIME * 100)
+	elseif state == "charged" or state == "active" then
+		charge_progress = 100
+	end
+	local charge_fill = 7.8 * charge_progress / 100
 
-	-- Control buttons and output info
-	if state == "standby" then
-		if fuel_count >= FUEL_SLOTS and hv_ready then
-			fs = fs .. "button[2.5,3.5;3,1;charge;Charge]"
-		else
-			fs = fs .. "label[2.5,3.7;Charge (not ready)]"
-		end
-	elseif state == "charging" then
-		fs = fs .. "label[2.5,3.7;Charging... " .. charge_timer .. "s]"
-	elseif state == "charged" then
-		fs = fs .. "button[2,3.5;4,1;inject;Inject Fuel & Start]"
-	elseif state == "active" then
+	local fs = "size[9,10.5]"
+		.. "bgcolor[#080808;true]"
+		.. "listcolors[#1a1a2e;#2a2a3e;#333355]"
+		-- Header
+		.. "box[0,0;8.8,0.8;#1a1a2e]"
+		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		-- Status
+		.. "box[0,1;8.8,0.6;#0a0a15]"
+		.. "label[0.3,1.1;Status: " .. status_text .. "]"
+		-- Progress bar
+		.. "box[0.5,1.8;7.8,0.5;#1a1a1a]"
+
+	if charge_fill > 0 then
+		fs = fs .. "box[0.5,1.8;" .. string.format("%.1f", charge_fill) .. ",0.5;#00ccaa]"
+	end
+	fs = fs .. "label[8.5,1.9;" .. charge_progress .. "%]"
+
+	-- Fuel section
+	fs = fs .. "box[0,2.5;8.8,1.8;#0d0d1a]"
+		.. "label[0.3,2.6;Fuel Rods (" .. fuel_count .. "/" .. FUEL_SLOTS .. ")]"
+		.. "list[context;fuel;1.5,3;6,1;]"
+
+	-- Power section
+	fs = fs .. "box[0,4.5;8.8,1.2;#0d0d1a]"
+	if hv_ready then
+		fs = fs .. "label[0.3,4.6;HV Power: " .. minetest.colorize("#00ff66", "READY") .. "]"
+	else
+		fs = fs .. "label[0.3,4.6;HV Power: " .. minetest.colorize("#ff3333", "INSUFFICIENT") .. "]"
+	end
+
+	if state == "active" then
 		local mins = math.floor(fuel_time / 60)
 		local secs = fuel_time % 60
-		fs = fs .. "label[0.5,3.5;Fuel Remaining: "
-			.. string.format("%d:%02d", mins, secs) .. "]"
-		fs = fs .. "label[0.5,4;Output: 140,000 EU (" .. power_tier .. ")]"
+		fs = fs .. "label[0.3,5.1;Output: " .. minetest.colorize("#00ccaa", "140,000 EU")
+			.. " (" .. power_tier .. ")]"
+		-- Fuel remaining with drain bar
+		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. string.format("%d:%02d", mins, secs) .. "]"
+		local fuel_pct = math.floor(fuel_time / FUEL_DURATION * 100)
+		local fuel_fill = 7.8 * fuel_pct / 100
+		fs = fs .. "box[0.5,6.3;7.8,0.4;#1a1a1a]"
+		if fuel_fill > 0 then
+			fs = fs .. "box[0.5,6.3;" .. string.format("%.1f", fuel_fill) .. ",0.4;#00ccaa]"
+		end
+	end
+
+	-- Control buttons
+	if state == "standby" then
+		if hv_ready then
+			fs = fs .. "box[2.5,5.8;4,0.7;#00ccaa]"
+				.. "button[2.5,5.8;4,0.7;charge;Charge]"
+		else
+			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Charge (HV not ready)") .. "]"
+		end
+	elseif state == "charging" then
+		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
+			"Charging... " .. charge_timer .. "s") .. "]"
+	elseif state == "charged" then
+		if fuel_count >= FUEL_SLOTS then
+			fs = fs .. "box[1.5,5.8;6,0.7;#00ff66]"
+				.. "button[1.5,5.8;6,0.7;inject;Inject Fuel & Start]"
+		else
+			fs = fs .. "label[1.5,5.9;" .. minetest.colorize("#666666",
+				"Inject Fuel & Start (need " .. (FUEL_SLOTS - fuel_count) .. " more rods)") .. "]"
+		end
 	end
 
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0,5;8,1;]"
-		.. "list[current_player;main;0,6;8,3;8]"
+	fs = fs .. "list[current_player;main;0.5,7;8,1;]"
+		.. "list[current_player;main;0.5,8.2;8,3;8]"
 		.. "listring[context;fuel]"
 		.. "listring[current_player;main]"
 
@@ -391,18 +442,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		local state = meta:get_string("reactor_state")
 		if state ~= "standby" then return end
 
-		-- Verify fuel
-		local inv = meta:get_inventory()
-		local fuel_count = 0
-		for i = 1, FUEL_SLOTS do
-			local stack = inv:get_stack("fuel", i)
-			if stack:get_name() == FUEL_ITEM then
-				fuel_count = fuel_count + stack:get_count()
-			end
-		end
-		if fuel_count < FUEL_SLOTS then return end
-
-		-- Verify HV power
+		-- Verify HV power (fuel not required for charging)
 		local js_pos = find_neighbor(pos, "lazarus_space:plasma_jumpstarter")
 		if not js_pos then return end
 		local js_meta = minetest.get_meta(js_pos)
@@ -425,8 +465,18 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		local state = meta:get_string("reactor_state")
 		if state ~= "charged" then return end
 
-		-- Consume fuel rods
+		-- Verify all fuel rods are loaded
 		local inv = meta:get_inventory()
+		local fuel_count = 0
+		for i = 1, FUEL_SLOTS do
+			local stack = inv:get_stack("fuel", i)
+			if stack:get_name() == FUEL_ITEM then
+				fuel_count = fuel_count + stack:get_count()
+			end
+		end
+		if fuel_count < FUEL_SLOTS then return end
+
+		-- Consume fuel rods
 		for i = 1, FUEL_SLOTS do
 			inv:set_stack("fuel", i, "")
 		end
@@ -483,26 +533,9 @@ local function panel_on_timer(pos, elapsed)
 		meta:set_float("check_accumulator", check_acc)
 	end
 
-	-- Charging countdown
+	-- Charging countdown (fuel not required during charging)
 	if state == "charging" then
 		local ct = meta:get_int("charge_timer") - 1
-
-		-- Check fuel still present
-		local inv = meta:get_inventory()
-		local fuel_count = 0
-		for i = 1, FUEL_SLOTS do
-			local stack = inv:get_stack("fuel", i)
-			if stack:get_name() == FUEL_ITEM then
-				fuel_count = fuel_count + stack:get_count()
-			end
-		end
-		if fuel_count < FUEL_SLOTS then
-			meta:set_string("reactor_state", "standby")
-			meta:set_int("charge_timer", 0)
-			meta:set_string("infotext", "Magnetic Fusion Reactor — Charge Failed: Fuel Removed")
-			meta:set_string("formspec", build_reactor_formspec(pos))
-			return true
-		end
 
 		if ct <= 0 then
 			meta:set_string("reactor_state", "charged")
@@ -852,23 +885,56 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 		local meta = minetest.get_meta(pos)
 		local tier = meta:get_string("output_tier")
 		if tier == "" then tier = "HV" end
-		local active = meta:get_int("active") == 1
 
-		local output_label
-		if active then
-			output_label = "Output: 140,000 EU"
-		else
-			output_label = "Output: 0 EU (Reactor Offline)"
+		-- Check reactor state from neighboring control panel
+		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
+		local active = false
+		if panel_pos then
+			local panel_meta = minetest.get_meta(panel_pos)
+			active = panel_meta:get_string("reactor_state") == "active"
 		end
 
-		local fs = "size[8,4]"
+		-- Build polished formspec
+		local fs = "size[6,4]"
 			.. "bgcolor[#080808;true]"
-			.. "label[2,0;Fusion Power Output]"
-			.. "label[0.5,0.5;Current Tier: " .. tier .. "]"
-			.. "label[0.5,1;" .. output_label .. "]"
-			.. "button[0.5,2;2,1;set_lv;LV]"
-			.. "button[3,2;2,1;set_mv;MV]"
-			.. "button[5.5,2;2,1;set_hv;HV]"
+			-- Header
+			.. "box[0,0;5.8,0.8;#1a1a2e]"
+			.. "label[1.5,0.2;Fusion Power Output]"
+			-- Status
+			.. "box[0,1;5.8,0.6;#0a0a15]"
+
+		if active then
+			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#00ff66", "ONLINE")
+				.. "  140,000 EU]"
+		else
+			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "OFFLINE")
+				.. "  0 EU]"
+		end
+
+		-- Tier selection
+		fs = fs .. "box[0,1.8;5.8,1.5;#0d0d1a]"
+			.. "label[0.3,1.9;Output Tier]"
+
+		-- Tier buttons with highlight on selected
+		local tiers = {{"LV", 0.3}, {"MV", 2.1}, {"HV", 3.9}}
+		for _, t in ipairs(tiers) do
+			local name, x = t[1], t[2]
+			if tier == name then
+				fs = fs .. "box[" .. x .. ",2.4;1.5,0.7;#00ccaa]"
+			else
+				fs = fs .. "box[" .. x .. ",2.4;1.5,0.7;#1a1a2e]"
+			end
+			fs = fs .. "button[" .. x .. ",2.4;1.5,0.7;set_" .. name:lower() .. ";" .. name .. "]"
+		end
+
+		-- Output info
+		if active then
+			fs = fs .. "label[0.3,3.4;Supplying: " .. minetest.colorize("#00ccaa", "140,000 EU")
+				.. " on " .. tier .. "]"
+		else
+			fs = fs .. "label[0.3,3.4;" .. minetest.colorize("#666666",
+				"No output - Reactor offline") .. "]"
+		end
 
 		minetest.show_formspec(clicker:get_player_name(),
 			"lazarus_space:power_output_" .. minetest.pos_to_string(pos), fs)
@@ -876,9 +942,16 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 	technic_run = function(pos, node)
 		local meta = minetest.get_meta(pos)
-		local active = meta:get_int("active") == 1
 		local tier = meta:get_string("output_tier")
 		if tier == "" then tier = "HV" end
+
+		-- Check reactor state from neighboring control panel
+		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
+		local active = false
+		if panel_pos then
+			local panel_meta = minetest.get_meta(panel_pos)
+			active = panel_meta:get_string("reactor_state") == "active"
+		end
 
 		-- Reset all supply values
 		meta:set_int("LV_EU_supply", 0)
@@ -887,10 +960,10 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 		if active then
 			meta:set_int(tier .. "_EU_supply", POWER_OUTPUT)
-			meta:set_string("infotext", "Fusion Power Output — "
+			meta:set_string("infotext", "Fusion Power Output - "
 				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
 		else
-			meta:set_string("infotext", "Fusion Power Output — Offline")
+			meta:set_string("infotext", "Fusion Power Output - Offline")
 		end
 	end,
 })
