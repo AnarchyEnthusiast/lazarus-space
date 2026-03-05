@@ -245,18 +245,21 @@ end
 
 -- Helper: render a button with a centered thin border outline
 -- ox/oy correct for Minetest button internal rendering offset
+-- wc shrinks border width to match actual button render width
 local function btn(fs, x, y, w, h, name, label, color)
 	local t = 0.05
 	local ox, oy = -0.05, -0.05
+	local wc = -0.1
 	local bx, by = x + ox, y + oy
+	local bw = w + wc
 	-- Top edge
-	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. w .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
 	-- Bottom edge
-	fs = fs .. "box[" .. bx .. "," .. (by + h) .. ";" .. w .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. bx .. "," .. (by + h) .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
 	-- Left edge
 	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
 	-- Right edge
-	fs = fs .. "box[" .. (bx + w) .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
+	fs = fs .. "box[" .. (bx + bw) .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
 	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
 	return fs
 end
@@ -673,6 +676,62 @@ local function panel_on_timer(pos, elapsed)
 end
 
 -- ============================================================
+-- PLASMA FIELD CORNER HELPER
+-- ============================================================
+
+-- Check if a plasma_field at pos should become a corner piece.
+-- Converts to corner if it has exactly 2 plasma neighbors on perpendicular axes.
+function lazarus_space.check_plasma_corner(pos)
+	local node = minetest.get_node(pos)
+	if node.name ~= "lazarus_space:plasma_field" then return end
+
+	local PF = "lazarus_space:plasma_field"
+	local PFC = "lazarus_space:plasma_field_corner"
+	local dirs = {
+		{x=1,  y=0, z=0,  label="+x"},
+		{x=-1, y=0, z=0,  label="-x"},
+		{x=0,  y=0, z=1,  label="+z"},
+		{x=0,  y=0, z=-1, label="-z"},
+	}
+
+	-- Find which directions have plasma field neighbors
+	local connections = {}
+	for _, d in ipairs(dirs) do
+		local npos = vector.add(pos, d)
+		local nn = minetest.get_node(npos).name
+		if nn == PF or nn == PFC then
+			connections[#connections+1] = d.label
+		end
+	end
+
+	-- Need exactly 2 connections on perpendicular axes
+	if #connections ~= 2 then return end
+	local has_x, has_z = false, false
+	local x_dir, z_dir
+	for _, c in ipairs(connections) do
+		if c == "+x" or c == "-x" then has_x = true; x_dir = c end
+		if c == "+z" or c == "-z" then has_z = true; z_dir = c end
+	end
+	if not (has_x and has_z) then return end
+
+	-- Corner nodebox at facedir 0: arms along -X and +Z
+	-- Map direction pairs to corner param2
+	local corner_map = {
+		["-x+z"] = 0,
+		["-x-z"] = 1,
+		["+x-z"] = 2,
+		["+x+z"] = 3,
+	}
+	local key = x_dir .. z_dir
+	local param2 = corner_map[key] or 0
+
+	minetest.set_node(pos, {
+		name = PFC,
+		param2 = param2,
+	})
+end
+
+-- ============================================================
 -- NODE REGISTRATIONS
 -- ============================================================
 
@@ -717,47 +776,18 @@ minetest.register_node("lazarus_space:plasma_field", {
 	sounds = default.node_sound_metal_defaults(),
 
 	after_place_node = function(pos, placer, itemstack, pointed_thing)
-		-- Auto-corner logic: if the newly placed piece has two perpendicular
-		-- plasma field neighbors, convert it to a corner piece.
-		local PF = "lazarus_space:plasma_field"
-		local PFC = "lazarus_space:plasma_field_corner"
+		-- Auto-corner: check newly placed piece AND all its neighbors
+		lazarus_space.check_plasma_corner(pos)
 		local horiz = {
 			{x=1,y=0,z=0}, {x=-1,y=0,z=0},
 			{x=0,y=0,z=1}, {x=0,y=0,z=-1},
 		}
-
-		-- Collect which directions have plasma field neighbors
-		local has_x_pos, has_x_neg, has_z_pos, has_z_neg = false, false, false, false
 		for _, d in ipairs(horiz) do
 			local npos = vector.add(pos, d)
 			local nn = minetest.get_node(npos).name
-			if nn == PF or nn == PFC then
-				if d.x == 1 then has_x_pos = true
-				elseif d.x == -1 then has_x_neg = true
-				elseif d.z == 1 then has_z_pos = true
-				elseif d.z == -1 then has_z_neg = true
-				end
+			if nn == "lazarus_space:plasma_field" then
+				lazarus_space.check_plasma_corner(npos)
 			end
-		end
-
-		-- Need at least one X-axis and one Z-axis neighbor for a corner
-		local has_x = has_x_pos or has_x_neg
-		local has_z = has_z_pos or has_z_neg
-		if has_x and has_z then
-			-- Pick the first X and Z neighbor to determine corner orientation
-			-- Corner nodebox arms: one arm along -X, other along +Z (at facedir 0)
-			-- facedir rotations: 0=arms(-X,+Z), 1=arms(-Z,-X), 2=arms(+X,-Z), 3=arms(+Z,+X)
-			local corner_param2 = 0
-			if has_x_neg and has_z_pos then corner_param2 = 0      -- -X, +Z
-			elseif has_x_neg and has_z_neg then corner_param2 = 1  -- -X, -Z
-			elseif has_x_pos and has_z_neg then corner_param2 = 2  -- +X, -Z
-			elseif has_x_pos and has_z_pos then corner_param2 = 3  -- +X, +Z
-			end
-
-			minetest.set_node(pos, {
-				name = PFC,
-				param2 = corner_param2,
-			})
 		end
 	end,
 })
