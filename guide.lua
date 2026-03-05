@@ -1,5 +1,5 @@
 -- Lazarus Space: Magnetic Fusion Reactor Build Guide
--- 8-page craftable guide book with colored grid blueprints.
+-- 9-page craftable guide book with colored grid blueprints and side-view cross-sections.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -28,10 +28,6 @@ end
 -- GRID RENDERING UTILITY
 -- ============================================================
 
-local CELL = 0.3
-local GAP  = 0.02
-local STEP = CELL + GAP  -- 0.32 per cell
-
 local GRID_COLORS = {
 	P = "#e86400",     -- pole field (orange)
 	T = "#00cccc",     -- toroid field (cyan)
@@ -45,13 +41,25 @@ local GRID_COLORS = {
 	O = "#cc6600",     -- power output (brown/copper)
 }
 
-local function draw_grid(fs, grid, start_x, start_y, cell_size)
-	cell_size = cell_size or CELL
-	local step = cell_size + GAP
+local GRID_COLORS_DIM = {
+	P = "#743200",
+	T = "#006666",
+	S = "#444444",
+	L = "#1a661a",
+	C = "#1a661a",
+	["*"] = "#661a88",
+	a = "#111122",
+}
+
+local function draw_grid(fs, grid, start_x, start_y, cell_size, gap, color_table)
+	cell_size = cell_size or 0.25
+	gap = gap or 0.02
+	color_table = color_table or GRID_COLORS
+	local step = cell_size + gap
 	for row_idx, row_str in ipairs(grid) do
 		for col = 1, #row_str do
 			local ch = row_str:sub(col, col)
-			local color = GRID_COLORS[ch]
+			local color = color_table[ch]
 			if color then
 				local x = start_x + (col - 1) * step
 				local y = start_y + (row_idx - 1) * step
@@ -97,6 +105,63 @@ local function page_header(fs, title)
 end
 
 -- ============================================================
+-- SIDE-VIEW CROSS-SECTION DATA
+-- ============================================================
+
+local SIDE_VIEW = {
+	"P.....a.....P",  -- y=+2 (roof)
+	".TTTSPaPSTTT.",  -- y=+1 (wall layer)
+	".TLTSP*PSTLT.",  -- y= 0 (middle layer)
+	".TTTSPaPSTTT.",  -- y=-1 (wall layer)
+	"PSSSSSSSSSSSP",  -- y=-2 (floor)
+}
+
+-- Maps page number to which row(s) in SIDE_VIEW to highlight (1-indexed).
+local SIDE_HIGHLIGHT = {
+	[2] = {5},        -- floor page highlights bottom row
+	[3] = {2, 4},     -- wall page highlights rows 2 and 4 (symmetric)
+	[4] = {3},        -- core page highlights middle row
+	[5] = {3},        -- plasma page highlights middle row
+	[6] = {1},        -- roof page highlights top row
+	[7] = {3},        -- control page highlights middle row
+}
+
+local function draw_side_view(fs, page, start_x, start_y, cell_size)
+	cell_size = cell_size or 0.20
+	local gap = 0.02
+	local step = cell_size + gap
+
+	local highlight_rows = SIDE_HIGHLIGHT[page] or {}
+	local hl = {}
+	for _, r in ipairs(highlight_rows) do hl[r] = true end
+
+	for row_idx, row_str in ipairs(SIDE_VIEW) do
+		local colors = hl[row_idx] and GRID_COLORS or GRID_COLORS_DIM
+		for col = 1, #row_str do
+			local ch = row_str:sub(col, col)
+			local color = colors[ch]
+			if color then
+				local x = start_x + (col - 1) * step
+				local y = start_y + (row_idx - 1) * step
+				fs = fs .. "box[" .. x .. "," .. y .. ";"
+					.. cell_size .. "," .. cell_size .. ";" .. color .. "]"
+			end
+		end
+	end
+
+	-- Highlight border around the active row(s)
+	for _, r in ipairs(highlight_rows) do
+		local bx = start_x - 0.04
+		local by = start_y + (r - 1) * step - 0.04
+		local bw = #SIDE_VIEW[1] * step + 0.06
+		local bh = step + 0.06
+		fs = fs .. "box[" .. bx .. "," .. by .. ";" .. bw .. "," .. bh .. ";#00ccaa30]"
+	end
+
+	return fs
+end
+
+-- ============================================================
 -- PAGE 1: INTRODUCTION
 -- ============================================================
 
@@ -128,16 +193,16 @@ local function build_page_intro(fs)
 	line("  " .. c(teal, "120x") .. "  " .. c(white, "Pole Field"))
 	line("  " .. c(teal, " 96x") .. "  " .. c(white, "Toroid Field"))
 	line("  " .. c(teal, " 65x") .. "  " .. c(white, "Steel Block"))
-	line("  " .. c(teal, " 28x") .. "  " .. c(white, "Plasma Field") .. c(grey, "  (corners form automatically)"))
+	line("  " .. c(teal, " 28x") .. "  " .. c(white, "Plasma Field"))
 	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Pole Corrector"))
 	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Fusion Control Panel"))
 	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Plasma Jumpstarter"))
 	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Fusion Power Output"))
 
 	y = y + 0.2
-	line(c(grey, "Pages 2-6: Layer-by-layer build guide"))
-	line(c(grey, "Page 7: Control block placement"))
+	line(c(grey, "Pages 2-7: Layer-by-layer build guide"))
 	line(c(grey, "Page 8: Startup procedure"))
+	line(c(grey, "Page 9: Complete structure overview"))
 
 	return fs
 end
@@ -165,18 +230,39 @@ local GRID_FLOOR = {
 local function build_page_floor(fs)
 	fs = page_header(fs, "Step 1: Base Platform (Bottom Layer)")
 
-	local grid_w = 13 * STEP
-	local start_x = (9 - grid_w) / 2
-	local start_y = 1.5
-	fs = draw_grid(fs, GRID_FLOOR, start_x, start_y)
+	-- Top View label
+	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	local legend_y = start_y + 13 * STEP + 0.3
+	-- 13x13 grid, cell_size 0.25
+	local cell = 0.25
+	local gap = 0.02
+	local step = cell + gap
+	local grid_w = 13 * step
+	local start_x = (9 - grid_w) / 2
+	local start_y = 1.3
+	fs = draw_grid(fs, GRID_FLOOR, start_x, start_y, cell, gap)
+
+	-- Side View label
+	local side_label_y = start_y + 13 * step + 0.24
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	-- Side-view cross-section
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 2, side_x, side_y, side_cell)
+
+	-- Legend
+	local legend_y = side_y + 5 * side_step + 0.25
 	fs = draw_legend(fs, {
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
 	}, 0.6, legend_y)
 
-	local note_y = legend_y + 0.6
+	-- Note
+	local note_y = legend_y + 0.5
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("13x13 square border of Pole Field with a Steel Block") .. "]"
 	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
@@ -208,26 +294,44 @@ local GRID_WALLS = {
 local function build_page_walls(fs)
 	fs = page_header(fs, "Step 2: Walls (Layers 2 & 4)")
 
-	local grid_w = 13 * STEP
-	local start_x = (9 - grid_w) / 2
-	local start_y = 1.5
-	fs = draw_grid(fs, GRID_WALLS, start_x, start_y)
+	-- Top View label
+	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	local legend_y = start_y + 13 * STEP + 0.3
+	-- 13x13 grid, cell_size 0.25
+	local cell = 0.25
+	local gap = 0.02
+	local step = cell + gap
+	local grid_w = 13 * step
+	local start_x = (9 - grid_w) / 2
+	local start_y = 1.3
+	fs = draw_grid(fs, GRID_WALLS, start_x, start_y, cell, gap)
+
+	-- Side View label
+	local side_label_y = start_y + 13 * step + 0.24
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	-- Side-view cross-section
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 3, side_x, side_y, side_cell)
+
+	-- Legend
+	local legend_y = side_y + 5 * side_step + 0.25
 	fs = draw_legend(fs, {
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-		{color = "#222244", label = "Air (required)", width = 2.0},
 	}, 0.6, legend_y)
 
-	local note_y = legend_y + 0.9
+	-- Note
+	local note_y = legend_y + 0.5
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("Cross-shaped layout. Build two identical copies of this layer \xe2\x80\x94") .. "]"
 	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
 		.. minetest.formspec_escape("one directly above the base, one directly below the roof.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.8) .. ";"
-		.. minetest.formspec_escape("Center must be air (empty) above and below the Pole Corrector.") .. "]"
 
 	return fs
 end
@@ -249,14 +353,32 @@ local GRID_CORE = {
 local function build_page_core(fs)
 	fs = page_header(fs, "Step 3: Reactor Core (Middle Layer Center)")
 
-	local core_cell = 0.55
-	local core_step = core_cell + GAP
-	local grid_w = 7 * core_step
-	local start_x = (9 - grid_w) / 2
-	local start_y = 1.8
-	fs = draw_grid(fs, GRID_CORE, start_x, start_y, core_cell)
+	-- Top View label
+	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	local legend_y = start_y + 7 * core_step + 0.4
+	-- 7x7 grid, cell_size 0.45
+	local cell = 0.45
+	local gap = 0.02
+	local step = cell + gap
+	local grid_w = 7 * step
+	local start_x = (9 - grid_w) / 2
+	local start_y = 1.3
+	fs = draw_grid(fs, GRID_CORE, start_x, start_y, cell, gap)
+
+	-- Side View label
+	local side_label_y = start_y + 7 * step + 0.24
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	-- Side-view cross-section
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 4, side_x, side_y, side_cell)
+
+	-- Legend
+	local legend_y = side_y + 5 * side_step + 0.25
 	fs = draw_legend(fs, {
 		{color = "#cc44ff", label = "Pole Corrector", width = 2.2},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
@@ -264,13 +386,12 @@ local function build_page_core(fs)
 		{color = "#888888", label = "Steel Block", width = 1.8},
 	}, 0.6, legend_y)
 
-	local note_y = legend_y + 0.9
+	-- Note
+	local note_y = legend_y + 0.5
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("3x3 Pole Field ring with Pole Corrector at the exact center.") .. "]"
 	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
 		.. minetest.formspec_escape("Steel Blocks connect the core to the outer Toroid walls.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.8) .. ";"
-		.. minetest.formspec_escape("Air is required directly above and below the Pole Corrector.") .. "]"
 
 	return fs
 end
@@ -298,12 +419,32 @@ local GRID_PLASMA = {
 local function build_page_plasma(fs)
 	fs = page_header(fs, "Step 4: Plasma Ring (Middle Layer Full)")
 
-	local grid_w = 13 * STEP
-	local start_x = (9 - grid_w) / 2
-	local start_y = 1.5
-	fs = draw_grid(fs, GRID_PLASMA, start_x, start_y)
+	-- Top View label
+	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	local legend_y = start_y + 13 * STEP + 0.3
+	-- 13x13 grid, cell_size 0.25
+	local cell = 0.25
+	local gap = 0.02
+	local step = cell + gap
+	local grid_w = 13 * step
+	local start_x = (9 - grid_w) / 2
+	local start_y = 1.3
+	fs = draw_grid(fs, GRID_PLASMA, start_x, start_y, cell, gap)
+
+	-- Side View label
+	local side_label_y = start_y + 13 * step + 0.24
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	-- Side-view cross-section
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 5, side_x, side_y, side_cell)
+
+	-- Legend
+	local legend_y = side_y + 5 * side_step + 0.25
 	fs = draw_legend(fs, {
 		{color = "#33cc33", label = "Plasma Field", width = 2.0},
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
@@ -312,13 +453,12 @@ local function build_page_plasma(fs)
 		{color = "#888888", label = "Steel Block", width = 1.8},
 	}, 0.6, legend_y)
 
+	-- Note
 	local note_y = legend_y + 0.9
 	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("Green plasma ring loops around the outside. Corners form") .. "]"
+		.. minetest.formspec_escape("Green plasma ring loops around the outside of the cross.") .. "]"
 	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("automatically when you place straight pieces \xe2\x80\x94 just place them") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.8) .. ";"
-		.. minetest.formspec_escape("in a continuous loop. Steel Blocks at the outer corners.") .. "]"
+		.. minetest.formspec_escape("Steel Blocks at the outer corners.") .. "]"
 
 	return fs
 end
@@ -334,7 +474,7 @@ local GRID_ROOF = {
 	"P...........P",  -- z=-3
 	"P...........P",  -- z=-2
 	"P...........P",  -- z=-1
-	"P.....a.....P",  -- z= 0
+	"P...........P",  -- z= 0
 	"P...........P",  -- z=+1
 	"P...........P",  -- z=+2
 	"P...........P",  -- z=+3
@@ -346,29 +486,47 @@ local GRID_ROOF = {
 local function build_page_roof(fs)
 	fs = page_header(fs, "Step 5: Roof (Top Layer)")
 
-	local grid_w = 13 * STEP
-	local start_x = (9 - grid_w) / 2
-	local start_y = 1.5
-	fs = draw_grid(fs, GRID_ROOF, start_x, start_y)
+	-- Top View label
+	fs = fs .. "label[0.6,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
 
-	local legend_y = start_y + 13 * STEP + 0.3
+	-- 13x13 grid, cell_size 0.25
+	local cell = 0.25
+	local gap = 0.02
+	local step = cell + gap
+	local grid_w = 13 * step
+	local start_x = (9 - grid_w) / 2
+	local start_y = 1.3
+	fs = draw_grid(fs, GRID_ROOF, start_x, start_y, cell, gap)
+
+	-- Side View label
+	local side_label_y = start_y + 13 * step + 0.24
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	-- Side-view cross-section
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 6, side_x, side_y, side_cell)
+
+	-- Legend
+	local legend_y = side_y + 5 * side_step + 0.25
 	fs = draw_legend(fs, {
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-		{color = "#222244", label = "Air (required)", width = 2.0},
 	}, 0.6, legend_y)
 
-	local note_y = legend_y + 0.6
+	-- Note
+	local note_y = legend_y + 0.5
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("Center must be air (open) above the Pole Corrector.") .. "]"
 
 	return fs
 end
 
 -- ============================================================
--- PAGE 7: CONTROL BLOCKS
+-- PAGE 7: CONTROL BLOCKS (reworked — horizontal layout with side view)
 -- ============================================================
 
 local GRID_CONTROL = {
@@ -382,55 +540,60 @@ local GRID_CONTROL = {
 local function build_page_controls(fs)
 	fs = page_header(fs, "Step 6: Control Panel, Jumpstarter & Power Output")
 
-	-- Vertical stack diagram (3 colored blocks)
-	local stack_x = 1.5
-	local stack_y = 1.8
-	local box_w = 3.0
+	-- Horizontal row of 3 colored blocks
+	local box_w = 2.2
 	local box_h = 0.7
-	local box_gap = 0.05
+	local box_gap = 0.15
+	local total_w = 3 * box_w + 2 * box_gap
+	local box_x = (9 - total_w) / 2
+	local box_y = 1.5
 
-	-- Jumpstarter (top)
-	fs = fs .. "box[" .. stack_x .. "," .. stack_y .. ";" .. box_w .. "," .. box_h .. ";#ccaa00]"
-	fs = fs .. "label[" .. (stack_x + 0.6) .. "," .. (stack_y + 0.38) .. ";Jumpstarter]"
+	-- Jumpstarter (left)
+	fs = fs .. "box[" .. box_x .. "," .. box_y .. ";" .. box_w .. "," .. box_h .. ";#ccaa00]"
+	fs = fs .. "label[" .. (box_x + 0.35) .. "," .. (box_y + 0.38) .. ";Jumpstarter]"
 
-	-- Control Panel (middle)
-	local cp_y = stack_y + box_h + box_gap
-	fs = fs .. "box[" .. stack_x .. "," .. cp_y .. ";" .. box_w .. "," .. box_h .. ";#cc3399]"
-	fs = fs .. "label[" .. (stack_x + 0.5) .. "," .. (cp_y + 0.38) .. ";Control Panel]"
+	-- Control Panel (center)
+	local cp_x = box_x + box_w + box_gap
+	fs = fs .. "box[" .. cp_x .. "," .. box_y .. ";" .. box_w .. "," .. box_h .. ";#cc3399]"
+	fs = fs .. "label[" .. (cp_x + 0.25) .. "," .. (box_y + 0.38) .. ";Control Panel]"
 
-	-- Power Output (bottom)
-	local po_y = cp_y + box_h + box_gap
-	fs = fs .. "box[" .. stack_x .. "," .. po_y .. ";" .. box_w .. "," .. box_h .. ";#cc6600]"
-	fs = fs .. "label[" .. (stack_x + 0.5) .. "," .. (po_y + 0.38) .. ";Power Output]"
+	-- Power Output (right)
+	local po_x = cp_x + box_w + box_gap
+	fs = fs .. "box[" .. po_x .. "," .. box_y .. ";" .. box_w .. "," .. box_h .. ";#cc6600]"
+	fs = fs .. "label[" .. (po_x + 0.25) .. "," .. (box_y + 0.38) .. ";Power Output]"
 
-	-- Context grid (5x5, cell_size=0.4)
+	-- 5x5 side-view placement grid below
 	local ctx_cell = 0.4
-	local ctx_step = ctx_cell + GAP
-	local ctx_x = 5.5
-	local ctx_y = 2.0
-	fs = draw_grid(fs, GRID_CONTROL, ctx_x, ctx_y, ctx_cell)
+	local ctx_gap = 0.02
+	local ctx_step = ctx_cell + ctx_gap
+	local ctx_w = 5 * ctx_step
+	local ctx_x = (9 - ctx_w) / 2
+	local ctx_y = box_y + box_h + 0.5
+	fs = draw_grid(fs, GRID_CONTROL, ctx_x, ctx_y, ctx_cell, ctx_gap)
 
 	-- Label for context grid
-	fs = fs .. "label[" .. ctx_x .. "," .. (ctx_y + 5 * ctx_step + 0.2) .. ";"
-		.. minetest.formspec_escape("Top-down view") .. "]"
+	fs = fs .. "label[" .. ctx_x .. "," .. (ctx_y + 5 * ctx_step + 0.15) .. ";"
+		.. minetest.colorize("#aaaaaa", "Top-down placement view") .. "]"
 
-	-- Notes below diagrams
-	local note_y = po_y + box_h + 0.6
+	-- Side-view cross-section
+	local side_label_y = ctx_y + 5 * ctx_step + 0.5
+	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
+
+	local side_y = side_label_y + 0.15
+	local side_cell = 0.20
+	local side_step = side_cell + 0.02
+	local side_w = 13 * side_step
+	local side_x = (9 - side_w) / 2
+	fs = draw_side_view(fs, 7, side_x, side_y, side_cell)
+
+	-- Notes
+	local note_y = side_y + 5 * side_step + 0.25
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("The Control Panel must touch a Toroid Field block.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.45) .. ";"
+	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
 		.. minetest.formspec_escape("The Jumpstarter and Power Output must each touch") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.85) .. ";"
+	fs = fs .. "label[0.6," .. (note_y + 0.8) .. ";"
 		.. minetest.formspec_escape("the Control Panel. Can be placed on any side.") .. "]"
-
-	-- Legend
-	local legend_y = note_y + 1.4
-	fs = draw_legend(fs, {
-		{color = "#cc3399", label = "Control Panel", width = 2.2},
-		{color = "#ccaa00", label = "Jumpstarter", width = 2.0},
-		{color = "#cc6600", label = "Power Output", width = 2.0},
-		{color = "#00cccc", label = "Toroid Field", width = 2.0},
-	}, 0.6, legend_y)
 
 	return fs
 end
@@ -485,10 +648,55 @@ local function build_page_startup(fs)
 end
 
 -- ============================================================
+-- PAGE 9: COMPLETE STRUCTURE — EXPLODED VIEW
+-- ============================================================
+
+local EXPLODED_LAYERS = {
+	{grid = GRID_FLOOR,  label = "Floor (y=-2)"},
+	{grid = GRID_WALLS,  label = "Wall (y=-1)"},
+	{grid = GRID_PLASMA, label = "Middle (y=0)"},
+	{grid = GRID_WALLS,  label = "Wall (y=+1)"},
+	{grid = GRID_ROOF,   label = "Roof (y=+2)"},
+}
+
+local function build_page_complete(fs)
+	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 Exploded View")
+
+	local base_x = 1.2
+	local base_y = 6.8
+
+	for i, layer in ipairs(EXPLODED_LAYERS) do
+		local offset = i - 1
+		local lx = base_x + offset * 0.30
+		local ly = base_y - offset * 0.40
+		fs = draw_grid(fs, layer.grid, lx, ly, 0.12, 0.01)
+		-- Label to the right of each layer
+		fs = fs .. "label[" .. (lx + 1.85) .. "," .. (ly + 0.8) .. ";"
+			.. minetest.colorize("#aaaaaa", layer.label) .. "]"
+	end
+
+	-- Condensed legend
+	local legend_y = 8.3
+	fs = draw_legend(fs, {
+		{color = "#e86400", label = "Pole", width = 1.1},
+		{color = "#00cccc", label = "Toroid", width = 1.3},
+		{color = "#33cc33", label = "Plasma", width = 1.3},
+		{color = "#cc44ff", label = "Corrector", width = 1.6},
+		{color = "#888888", label = "Steel", width = 1.2},
+	}, 0.6, legend_y)
+
+	-- Note
+	fs = fs .. "label[0.6,8.75;"
+		.. minetest.formspec_escape("5 layers from bottom to top. Build from the base up.") .. "]"
+
+	return fs
+end
+
+-- ============================================================
 -- FORMSPEC SHELL AND NAVIGATION
 -- ============================================================
 
-local PAGE_COUNT = 8
+local PAGE_COUNT = 9
 
 local function build_guide_page(page)
 	local fs = "formspec_version[4]"
@@ -505,6 +713,7 @@ local function build_guide_page(page)
 	elseif page == 6 then fs = build_page_roof(fs)
 	elseif page == 7 then fs = build_page_controls(fs)
 	elseif page == 8 then fs = build_page_startup(fs)
+	elseif page == 9 then fs = build_page_complete(fs)
 	end
 
 	-- Page number (centered)
@@ -516,7 +725,7 @@ local function build_guide_page(page)
 			"#00ccaa", "#00ddbb", "#009988")
 	end
 
-	-- Next button (hidden on page 8)
+	-- Next button (hidden on last page)
 	if page < PAGE_COUNT then
 		fs = styled_btn(fs, 7.0, 9.15, 1.5, 0.65, "next", "Next >",
 			"#00ccaa", "#00ddbb", "#009988")
