@@ -243,15 +243,44 @@ end
 -- FORMSPEC BUILDERS
 -- ============================================================
 
+-- Helper: render a button with a symmetric colored backdrop (0.1 padding)
+local function btn(fs, x, y, w, h, name, label, color)
+	local p = 0.1
+	fs = fs .. "box[" .. (x-p) .. "," .. (y-p) .. ";" .. (w+p*2) .. "," .. (h+p*2) .. ";" .. color .. "]"
+		.. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
+	return fs
+end
+
+-- Helper: render a gradient progress bar (3-strip: bright top, base middle, dark bottom)
+local function gradient_bar(fs, x, y, w, h, fill_pct)
+	-- Background
+	fs = fs .. "box[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";#1a1a1a]"
+	if fill_pct > 0 then
+		local fw = w * fill_pct / 100
+		local fws = string.format("%.1f", fw)
+		local strip_h = h / 3
+		local sh = string.format("%.2f", strip_h)
+		-- Top strip: bright
+		fs = fs .. "box[" .. x .. "," .. y .. ";" .. fws .. "," .. sh .. ";#00eebb]"
+		-- Middle strip: base
+		fs = fs .. "box[" .. x .. "," .. string.format("%.2f", y + strip_h)
+			.. ";" .. fws .. "," .. sh .. ";#00ccaa]"
+		-- Bottom strip: dark
+		fs = fs .. "box[" .. x .. "," .. string.format("%.2f", y + strip_h * 2)
+			.. ";" .. fws .. "," .. sh .. ";#009988]"
+	end
+	return fs
+end
+
 local function build_unchecked_formspec()
-	return "size[9,4]"
+	local fs = "size[9,4]"
 		.. "bgcolor[#080808;true]"
 		.. "box[0,0;8.8,0.8;#1a1a2e]"
 		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[2.5,1.1;Structure Check Required]"
-		.. "box[2.5,2.2;4,0.7;#00ccaa]"
-		.. "button[2.5,2.2;4,0.7;check_structure;Check Structure]"
+	fs = btn(fs, 2.5, 2.2, 4, 0.7, "check_structure", "Check Structure", "#00ccaa")
+	return fs
 end
 
 local function build_error_formspec(errors)
@@ -270,8 +299,7 @@ local function build_error_formspec(errors)
 		y = y + 0.5
 	end
 
-	fs = fs .. "box[2.5," .. (y + 0.3) .. ";4,0.7;#00ccaa]"
-		.. "button[2.5," .. (y + 0.3) .. ";4,0.7;check_structure;Retry Check]"
+	fs = btn(fs, 2.5, y + 0.3, 4, 0.7, "check_structure", "Retry Check", "#00ccaa")
 	return fs
 end
 
@@ -281,9 +309,6 @@ local function build_reactor_formspec(pos)
 	if state == "" then state = "standby" end
 	local charge_timer = meta:get_int("charge_timer")
 	local fuel_time = meta:get_int("fuel_time")
-	local power_tier = meta:get_string("power_tier")
-	if power_tier == "" then power_tier = "HV" end
-
 	-- Count fuel rods
 	local inv = meta:get_inventory()
 	local fuel_count = 0
@@ -303,14 +328,6 @@ local function build_reactor_formspec(pos)
 		if stored >= JUMPSTART_ENERGY then
 			hv_ready = true
 		end
-	end
-
-	-- Check power output tier
-	local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
-	if po_pos then
-		local po_meta = minetest.get_meta(po_pos)
-		local tier = po_meta:get_string("output_tier")
-		if tier ~= "" then power_tier = tier end
 	end
 
 	-- Status text with color
@@ -347,12 +364,8 @@ local function build_reactor_formspec(pos)
 		-- Status
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[0.3,1.1;Status: " .. status_text .. "]"
-		-- Progress bar
-		.. "box[0.5,1.8;7.8,0.5;#1a1a1a]"
-
-	if charge_fill > 0 then
-		fs = fs .. "box[0.5,1.8;" .. string.format("%.1f", charge_fill) .. ",0.5;#00ccaa]"
-	end
+	-- Progress bar with gradient
+	fs = gradient_bar(fs, 0.5, 1.8, 7.8, 0.5, charge_progress)
 	fs = fs .. "label[8.5,1.9;" .. charge_progress .. "%]"
 
 	-- Fuel section
@@ -372,22 +385,17 @@ local function build_reactor_formspec(pos)
 		local mins = math.floor(fuel_time / 60)
 		local secs = fuel_time % 60
 		fs = fs .. "label[0.3,5.1;Output: " .. minetest.colorize("#00ccaa", "140,000 EU")
-			.. " (" .. power_tier .. ")]"
-		-- Fuel remaining with drain bar
+			.. " (HV)]"
+		-- Fuel remaining with gradient drain bar
 		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. string.format("%d:%02d", mins, secs) .. "]"
 		local fuel_pct = math.floor(fuel_time / FUEL_DURATION * 100)
-		local fuel_fill = 7.8 * fuel_pct / 100
-		fs = fs .. "box[0.5,6.3;7.8,0.4;#1a1a1a]"
-		if fuel_fill > 0 then
-			fs = fs .. "box[0.5,6.3;" .. string.format("%.1f", fuel_fill) .. ",0.4;#00ccaa]"
-		end
+		fs = gradient_bar(fs, 0.5, 6.3, 7.8, 0.4, fuel_pct)
 	end
 
 	-- Control buttons
 	if state == "standby" then
 		if hv_ready then
-			fs = fs .. "box[2.5,5.8;4,0.7;#00ccaa]"
-				.. "button[2.5,5.8;4,0.7;charge;Charge]"
+			fs = btn(fs, 2.5, 5.8, 4, 0.7, "charge", "Charge", "#00ccaa")
 		else
 			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Charge (HV not ready)") .. "]"
 		end
@@ -396,8 +404,7 @@ local function build_reactor_formspec(pos)
 			"Charging... " .. charge_timer .. "s") .. "]"
 	elseif state == "charged" then
 		if fuel_count >= FUEL_SLOTS then
-			fs = fs .. "box[1.5,5.8;6,0.7;#00ff66]"
-				.. "button[1.5,5.8;6,0.7;inject;Inject Fuel & Start]"
+			fs = btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start", "#00ff66")
 		else
 			fs = fs .. "label[1.5,5.9;" .. minetest.colorize("#666666",
 				"Inject Fuel & Start (need " .. (FUEL_SLOTS - fuel_count) .. " more rods)") .. "]"
@@ -576,8 +583,9 @@ local function panel_on_timer(pos, elapsed)
 		return true
 	end
 
-	-- Standby or charged: keep timer alive for integrity checks
+	-- Standby or charged: refresh formspec for live HV status polling
 	if meta:get_string("validated") == "true" then
+		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
 	end
 
@@ -727,7 +735,6 @@ minetest.register_node("lazarus_space:fusion_control_panel", {
 		inv:set_size("fuel", FUEL_SLOTS)
 		meta:set_string("reactor_state", "")
 		meta:set_string("validated", "")
-		meta:set_string("power_tier", "HV")
 		meta:set_string("infotext", "Magnetic Fusion Reactor — Not Validated")
 		meta:set_string("formspec", build_unchecked_formspec())
 	end,
@@ -851,8 +858,6 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 		cracky = 2,
 		technic_machine = 1,
 		technic_hv = 1,
-		technic_mv = 1,
-		technic_lv = 1,
 	},
 	is_ground_content = false,
 	connect_sides = {"top", "bottom", "front", "back", "left", "right"},
@@ -860,12 +865,8 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
-		meta:set_string("output_tier", "HV")
-		meta:set_int("active", 0)
-		meta:set_int("LV_EU_supply", 0)
-		meta:set_int("MV_EU_supply", 0)
 		meta:set_int("HV_EU_supply", 0)
-		meta:set_string("infotext", "Fusion Power Output — Offline")
+		meta:set_string("infotext", "Fusion Power Output - Offline")
 	end,
 
 	after_place_node = function(pos, placer)
@@ -882,10 +883,6 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 	end,
 
 	on_rightclick = function(pos, node, clicker)
-		local meta = minetest.get_meta(pos)
-		local tier = meta:get_string("output_tier")
-		if tier == "" then tier = "HV" end
-
 		-- Check reactor state from neighboring control panel
 		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
 		local active = false
@@ -895,7 +892,7 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 		end
 
 		-- Build polished formspec
-		local fs = "size[6,4]"
+		local fs = "size[6,3]"
 			.. "bgcolor[#080808;true]"
 			-- Header
 			.. "box[0,0;5.8,0.8;#1a1a2e]"
@@ -911,28 +908,13 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 				.. "  0 EU]"
 		end
 
-		-- Tier selection
-		fs = fs .. "box[0,1.8;5.8,1.5;#0d0d1a]"
-			.. "label[0.3,1.9;Output Tier]"
-
-		-- Tier buttons with highlight on selected
-		local tiers = {{"LV", 0.3}, {"MV", 2.1}, {"HV", 3.9}}
-		for _, t in ipairs(tiers) do
-			local name, x = t[1], t[2]
-			if tier == name then
-				fs = fs .. "box[" .. x .. ",2.4;1.5,0.7;#00ccaa]"
-			else
-				fs = fs .. "box[" .. x .. ",2.4;1.5,0.7;#1a1a2e]"
-			end
-			fs = fs .. "button[" .. x .. ",2.4;1.5,0.7;set_" .. name:lower() .. ";" .. name .. "]"
-		end
-
 		-- Output info
+		fs = fs .. "box[0,1.8;5.8,0.8;#0d0d1a]"
 		if active then
-			fs = fs .. "label[0.3,3.4;Supplying: " .. minetest.colorize("#00ccaa", "140,000 EU")
-				.. " on " .. tier .. "]"
+			fs = fs .. "label[0.3,2;Supplying: " .. minetest.colorize("#00ccaa", "140,000 EU")
+				.. " on HV]"
 		else
-			fs = fs .. "label[0.3,3.4;" .. minetest.colorize("#666666",
+			fs = fs .. "label[0.3,2;" .. minetest.colorize("#666666",
 				"No output - Reactor offline") .. "]"
 		end
 
@@ -942,8 +924,6 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 	technic_run = function(pos, node)
 		local meta = minetest.get_meta(pos)
-		local tier = meta:get_string("output_tier")
-		if tier == "" then tier = "HV" end
 
 		-- Check reactor state from neighboring control panel
 		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
@@ -953,54 +933,19 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 			active = panel_meta:get_string("reactor_state") == "active"
 		end
 
-		-- Reset all supply values
-		meta:set_int("LV_EU_supply", 0)
-		meta:set_int("MV_EU_supply", 0)
-		meta:set_int("HV_EU_supply", 0)
-
 		if active then
-			meta:set_int(tier .. "_EU_supply", POWER_OUTPUT)
+			meta:set_int("HV_EU_supply", POWER_OUTPUT)
 			meta:set_string("infotext", "Fusion Power Output - "
-				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+				.. POWER_OUTPUT .. " EU (HV)")
 		else
+			meta:set_int("HV_EU_supply", 0)
 			meta:set_string("infotext", "Fusion Power Output - Offline")
 		end
 	end,
 })
 
--- Register power output as supply on all three tiers
+-- Register power output as HV supply
 technic.register_machine("HV", "lazarus_space:fusion_power_output", technic.supply)
-technic.register_machine("MV", "lazarus_space:fusion_power_output", technic.supply)
-technic.register_machine("LV", "lazarus_space:fusion_power_output", technic.supply)
-
--- Power output formspec handler
-minetest.register_on_player_receive_fields(function(player, formname, fields)
-	if not formname:find("^lazarus_space:power_output_") then return false end
-	local pos_str = formname:sub(#"lazarus_space:power_output_" + 1)
-	local pos = minetest.string_to_pos(pos_str)
-	if not pos then return false end
-	local node = minetest.get_node(pos)
-	if node.name ~= "lazarus_space:fusion_power_output" then return false end
-
-	local meta = minetest.get_meta(pos)
-	if fields.set_lv then
-		meta:set_string("output_tier", "LV")
-	elseif fields.set_mv then
-		meta:set_string("output_tier", "MV")
-	elseif fields.set_hv then
-		meta:set_string("output_tier", "HV")
-	end
-
-	if fields.set_lv or fields.set_mv or fields.set_hv then
-		-- Reopen the formspec to show the update
-		local def = minetest.registered_nodes[node.name]
-		if def and def.on_rightclick then
-			def.on_rightclick(pos, node, player)
-		end
-	end
-
-	return true
-end)
 
 -- ============================================================
 -- CRAFTING RECIPES
