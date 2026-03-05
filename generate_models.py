@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Generate .obj mesh files for the reactor guide book 3D models.
 
-Produces face-culled .obj files and a shared .mtl material file
-in the models/ directory. Each model is built from the same grid
-data used by the guide book's 2D blueprint pages.
+Uses a texture atlas approach: all block textures are combined into a single
+horizontal strip (80x16 pixels, 5 slots of 16x16 each). UV coordinates for
+each cube face point to the correct slot in the atlas. This avoids multi-material
+issues with Minetest's model[] formspec element.
+
+The corresponding Lua texture string uses [combine:80x16:...] to build the atlas
+at runtime from the individual block textures.
 
 Requires: Python 3.6+ (no external dependencies)
 """
@@ -13,31 +17,20 @@ import os
 MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-# ---- Block type to material mapping ----
-# Order here determines the usemtl output order in .obj files.
-# The Lua MODEL_TEXTURES string must match this order.
+# ---- Texture atlas slot mapping ----
+# Each block type maps to a slot index (0-4) in the 80x16 atlas.
+# UV u-coordinate: u_min = slot/5, u_max = (slot+1)/5
 
-MATERIAL_ORDER = [
-    ("P",  "pole_field",     "lazarus_space_pole_field.png"),
-    ("T",  "toroid_field",   "lazarus_space_toroid_field.png"),
-    ("S",  "steelblock",     "default_steel_block.png"),
-    ("L",  "plasma_field",   "lazarus_space_plasma_field.png"),
-    ("C",  "plasma_field",   "lazarus_space_plasma_field.png"),  # corner = same
-    ("*",  "pole_corrector", "lazarus_space_pole_corrector.png"),
-]
+SLOT_MAP = {
+    "P": 0,   # pole field
+    "T": 1,   # toroid field
+    "S": 2,   # steelblock
+    "L": 3,   # plasma field
+    "C": 3,   # plasma field corner (same texture)
+    "*": 4,   # pole corrector
+}
 
-# Character to material name
-CHAR_TO_MATERIAL = {}
-for ch, mat_name, _ in MATERIAL_ORDER:
-    CHAR_TO_MATERIAL[ch] = mat_name
-
-# Unique materials in order (for .mtl and texture list)
-UNIQUE_MATERIALS = []
-_seen = set()
-for _, mat_name, tex_file in MATERIAL_ORDER:
-    if mat_name not in _seen:
-        UNIQUE_MATERIALS.append((mat_name, tex_file))
-        _seen.add(mat_name)
+NUM_SLOTS = 5
 
 # ---- Grid data (same as guide.lua) ----
 
@@ -128,50 +121,48 @@ def build_occupied_set(layer_grids):
     for grid, y_off in layer_grids:
         for row_idx, row_str in enumerate(grid):
             for col_idx, ch in enumerate(row_str):
-                if ch in CHAR_TO_MATERIAL:
+                if ch in SLOT_MAP:
                     x = col_idx - 6
                     z = row_idx - 6
                     occupied.add((x, y_off, z))
     return occupied
 
 
-# Face definitions: (dx, dy, dz, vertex indices for quad, normal index)
+# Face definitions: (neighbor_offset, vertex_indices_for_quad, normal_index_1based)
 # Vertices of a unit cube at (x, y, z):
 #   0: (x,   y,   z)     1: (x+1, y,   z)
 #   2: (x+1, y+1, z)     3: (x,   y+1, z)
 #   4: (x,   y,   z+1)   5: (x+1, y,   z+1)
 #   6: (x+1, y+1, z+1)   7: (x,   y+1, z+1)
 FACE_DEFS = [
-    # (neighbor_offset, vertex_indices_for_quad, normal_index_1based, uv_indices_1based)
-    ((0, 0, -1), (0, 1, 2, 3), 1, (1, 2, 3, 4)),   # front  (-z)
-    ((0, 0,  1), (5, 4, 7, 6), 2, (1, 2, 3, 4)),   # back   (+z)
-    ((0,  1, 0), (3, 2, 6, 7), 3, (1, 2, 3, 4)),   # top    (+y)
-    ((0, -1, 0), (4, 5, 1, 0), 4, (1, 2, 3, 4)),   # bottom (-y)
-    (( 1, 0, 0), (1, 5, 6, 2), 5, (1, 2, 3, 4)),   # right  (+x)
-    ((-1, 0, 0), (4, 0, 3, 7), 6, (1, 2, 3, 4)),   # left   (-x)
+    # (neighbor_offset, vertex_indices, normal_index_1based)
+    ((0, 0, -1), (0, 1, 2, 3), 1),   # front  (-z)
+    ((0, 0,  1), (5, 4, 7, 6), 2),   # back   (+z)
+    ((0,  1, 0), (3, 2, 6, 7), 3),   # top    (+y)
+    ((0, -1, 0), (4, 5, 1, 0), 4),   # bottom (-y)
+    (( 1, 0, 0), (1, 5, 6, 2), 5),   # right  (+x)
+    ((-1, 0, 0), (4, 0, 3, 7), 6),   # left   (-x)
 ]
 
 
 def generate_obj(name, layer_grids):
-    """Generate a face-culled .obj file for the given layer grids."""
+    """Generate a face-culled .obj file using texture atlas UVs."""
     occupied = build_occupied_set(layer_grids)
 
-    # Collect vertices and faces grouped by material
     vertices = []
-    # faces_by_material: material_name -> list of (v1,v2,v3,v4, uv1,uv2,uv3,uv4, normal_idx)
-    faces_by_material = {}
-    for mat_name, _ in UNIQUE_MATERIALS:
-        faces_by_material[mat_name] = []
+    uvs = []
+    faces = []  # list of (v1,v2,v3,v4, uv1,uv2,uv3,uv4, normal_idx)
 
     vert_offset = 1  # .obj is 1-indexed
+    uv_offset = 1
 
     for grid, y_off in layer_grids:
         for row_idx, row_str in enumerate(grid):
             for col_idx, ch in enumerate(row_str):
-                if ch not in CHAR_TO_MATERIAL:
+                if ch not in SLOT_MAP:
                     continue
 
-                mat_name = CHAR_TO_MATERIAL[ch]
+                slot = SLOT_MAP[ch]
                 x = col_idx - 6
                 y = y_off
                 z = row_idx - 6
@@ -189,23 +180,36 @@ def generate_obj(name, layer_grids):
                 ]
                 vertices.extend(corners)
 
+                # 4 UV coords for this block's atlas slot
+                u_min = slot / NUM_SLOTS
+                u_max = (slot + 1) / NUM_SLOTS
+                uvs.append((u_min, 0.0))
+                uvs.append((u_max, 0.0))
+                uvs.append((u_max, 1.0))
+                uvs.append((u_min, 1.0))
+
                 # Emit only exposed faces (face culling)
-                for (dx, dy, dz), vi, ni, uvi in FACE_DEFS:
+                for (dx, dy, dz), vi, ni in FACE_DEFS:
                     if (x + dx, y + dy, z + dz) not in occupied:
-                        faces_by_material[mat_name].append((
+                        faces.append((
                             vert_offset + vi[0],
                             vert_offset + vi[1],
                             vert_offset + vi[2],
                             vert_offset + vi[3],
-                            uvi[0], uvi[1], uvi[2], uvi[3],
+                            uv_offset + 0,  # bottom-left of tile
+                            uv_offset + 1,  # bottom-right
+                            uv_offset + 2,  # top-right
+                            uv_offset + 3,  # top-left
                             ni,
                         ))
 
                 vert_offset += 8
+                uv_offset += 4
 
     # Write .obj file
     lines = []
-    lines.append("mtllib reactor_guide.mtl")
+    lines.append("# Reactor guide model — texture atlas approach")
+    lines.append("# Single material, UV coords select tile in [combine atlas")
     lines.append("")
 
     # Vertices
@@ -213,11 +217,9 @@ def generate_obj(name, layer_grids):
         lines.append(f"v {vx} {vy} {vz}")
     lines.append("")
 
-    # UV coordinates (4 standard coords for all faces)
-    lines.append("vt 0 0")
-    lines.append("vt 1 0")
-    lines.append("vt 1 1")
-    lines.append("vt 0 1")
+    # UV coordinates (per-cube, 4 per block)
+    for u, v in uvs:
+        lines.append(f"vt {u:.6f} {v:.6f}")
     lines.append("")
 
     # Normals (6 directions)
@@ -229,47 +231,38 @@ def generate_obj(name, layer_grids):
     lines.append("vn -1  0  0")
     lines.append("")
 
-    # Faces grouped by material
-    total_faces = 0
-    for mat_name, _ in UNIQUE_MATERIALS:
-        mat_faces = faces_by_material[mat_name]
-        if not mat_faces:
-            continue
-        lines.append(f"usemtl {mat_name}")
-        for v1, v2, v3, v4, t1, t2, t3, t4, ni in mat_faces:
-            lines.append(
-                f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}"
-            )
-        lines.append("")
-        total_faces += len(mat_faces)
+    # All faces under a single material
+    lines.append("usemtl reactor_atlas")
+    for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
+        lines.append(
+            f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}"
+        )
+    lines.append("")
 
     obj_path = os.path.join(MODELS_DIR, f"{name}.obj")
     with open(obj_path, "w") as f:
         f.write("\n".join(lines))
 
-    vert_count = len(vertices)
-    print(f"Generated {name}.obj ({vert_count} vertices, {total_faces} faces)")
-
-
-def generate_mtl():
-    """Generate the shared .mtl material file."""
-    lines = ["# reactor_guide.mtl", ""]
-    for mat_name, tex_file in UNIQUE_MATERIALS:
-        lines.append(f"newmtl {mat_name}")
-        lines.append(f"map_Kd {tex_file}")
-        lines.append("")
-
-    mtl_path = os.path.join(MODELS_DIR, "reactor_guide.mtl")
-    with open(mtl_path, "w") as f:
-        f.write("\n".join(lines))
-    print(f"Generated reactor_guide.mtl ({len(UNIQUE_MATERIALS)} materials)")
+    print(f"Generated {name}.obj ({len(vertices)} vertices, {len(faces)} faces)")
 
 
 def main():
-    generate_mtl()
+    # Remove old .mtl file if present (no longer needed)
+    mtl_path = os.path.join(MODELS_DIR, "reactor_guide.mtl")
+    if os.path.exists(mtl_path):
+        os.remove(mtl_path)
+        print("Removed old reactor_guide.mtl (no longer needed)")
+
     for name, layer_grids in LAYERS.items():
         generate_obj(name, layer_grids)
     print(f"\nAll models saved to {MODELS_DIR}")
+    print(f"\nLua texture string:")
+    print(f'  "[combine:80x16'
+          f':0,0=lazarus_space_pole_field.png'
+          f':16,0=lazarus_space_toroid_field.png'
+          f':32,0=default_steel_block.png'
+          f':48,0=lazarus_space_plasma_field.png'
+          f':64,0=lazarus_space_pole_corrector.png"')
 
 
 if __name__ == "__main__":

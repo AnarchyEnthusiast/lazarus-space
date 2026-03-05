@@ -1,6 +1,5 @@
 -- Lazarus Space: Magnetic Fusion Reactor Build Guide
--- 9-page craftable guide book with colored grid blueprints, side-view
--- cross-sections, and interactive 3D model viewers.
+-- 9-page craftable guide book with interactive 3D model viewers.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -26,7 +25,7 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- GRID RENDERING UTILITY
+-- GRID RENDERING (for page 7 control block diagram only)
 -- ============================================================
 
 local GRID_COLORS = {
@@ -40,16 +39,6 @@ local GRID_COLORS = {
 	J = "#ccaa00",     -- jumpstarter (yellow)
 	K = "#cc3399",     -- control panel (pink)
 	O = "#cc6600",     -- power output (brown/copper)
-}
-
-local GRID_COLORS_DIM = {
-	P = "#743200",
-	T = "#006666",
-	S = "#444444",
-	L = "#1a661a",
-	C = "#1a661a",
-	["*"] = "#661a88",
-	a = "#111122",
 }
 
 local function draw_grid(fs, grid, start_x, start_y, cell_size, gap, color_table)
@@ -106,65 +95,10 @@ local function page_header(fs, title)
 end
 
 -- ============================================================
--- SIDE-VIEW CROSS-SECTION DATA
+-- 3D MODEL HELPER — texture atlas approach
 -- ============================================================
-
-local SIDE_VIEW = {
-	"P.....a.....P",  -- y=+2 (roof)
-	".TTTSPaPSTTT.",  -- y=+1 (wall layer)
-	".TLTSP*PSTLT.",  -- y= 0 (middle layer)
-	".TTTSPaPSTTT.",  -- y=-1 (wall layer)
-	"PSSSSSSSSSSSP",  -- y=-2 (floor)
-}
-
--- Maps page number to which row(s) in SIDE_VIEW to highlight (1-indexed).
-local SIDE_HIGHLIGHT = {
-	[2] = {5},        -- floor page highlights bottom row
-	[3] = {2, 4},     -- wall page highlights rows 2 and 4 (symmetric)
-	[4] = {3},        -- core page highlights middle row
-	[5] = {3},        -- plasma page highlights middle row
-	[6] = {1},        -- roof page highlights top row
-	[7] = {3},        -- control page highlights middle row
-}
-
-local function draw_side_view(fs, page, start_x, start_y, cell_size)
-	cell_size = cell_size or 0.20
-	local gap = 0.02
-	local step = cell_size + gap
-
-	local highlight_rows = SIDE_HIGHLIGHT[page] or {}
-	local hl = {}
-	for _, r in ipairs(highlight_rows) do hl[r] = true end
-
-	for row_idx, row_str in ipairs(SIDE_VIEW) do
-		local colors = hl[row_idx] and GRID_COLORS or GRID_COLORS_DIM
-		for col = 1, #row_str do
-			local ch = row_str:sub(col, col)
-			local color = colors[ch]
-			if color then
-				local x = start_x + (col - 1) * step
-				local y = start_y + (row_idx - 1) * step
-				fs = fs .. "box[" .. x .. "," .. y .. ";"
-					.. cell_size .. "," .. cell_size .. ";" .. color .. "]"
-			end
-		end
-	end
-
-	-- Highlight border around the active row(s)
-	for _, r in ipairs(highlight_rows) do
-		local bx = start_x - 0.04
-		local by = start_y + (r - 1) * step - 0.04
-		local bw = #SIDE_VIEW[1] * step + 0.06
-		local bh = step + 0.06
-		fs = fs .. "box[" .. bx .. "," .. by .. ";" .. bw .. "," .. bh .. ";#00ccaa30]"
-	end
-
-	return fs
-end
-
--- ============================================================
--- 3D MODEL HELPER
--- ============================================================
+-- All models use a single material. UV coords point to the correct
+-- tile in an 80x16 atlas built at runtime with [combine.
 
 local PAGE_MODELS = {
 	[2] = "reactor_layer_floor.obj",
@@ -175,18 +109,22 @@ local PAGE_MODELS = {
 	[9] = "reactor_complete.obj",
 }
 
-local MODEL_TEXTURES = "lazarus_space_pole_field.png,"
-	.. "lazarus_space_toroid_field.png,"
-	.. "default_steel_block.png,"
-	.. "lazarus_space_plasma_field.png,"
-	.. "lazarus_space_pole_corrector.png"
+-- Single combined texture atlas: 5 slots of 16x16 in a horizontal strip
+local MODEL_TEXTURE = "[combine:80x16"
+	.. ":0,0=lazarus_space_pole_field.png"
+	.. ":16,0=lazarus_space_toroid_field.png"
+	.. ":32,0=default_steel_block.png"
+	.. ":48,0=lazarus_space_plasma_field.png"
+	.. ":64,0=lazarus_space_pole_corrector.png"
 
-local function add_model(fs, page, x, y, w, h)
+local function add_model(fs, page, x, y, w, h, rot_x, rot_y)
 	local mesh = PAGE_MODELS[page]
 	if not mesh then return fs end
+	rot_x = rot_x or 20
+	rot_y = rot_y or -30
 	fs = fs .. "model[" .. x .. "," .. y .. ";" .. w .. "," .. h
-		.. ";reactor_preview;" .. mesh .. ";" .. MODEL_TEXTURES
-		.. ";20,-30;false;true]"
+		.. ";reactor_preview;" .. mesh .. ";" .. MODEL_TEXTURE
+		.. ";" .. rot_x .. "," .. rot_y .. ";false;true]"
 	return fs
 end
 
@@ -211,11 +149,11 @@ local function build_page_intro(fs)
 	local grey = "#aaaaaa"
 
 	line(c(white, "The Magnetic Fusion Reactor is a 13x13x5 multiblock"))
-	line(c(white, "structure that generates ") .. c("#00ff66", "140,000 EU") .. c(white, " of power."))
+	line(c(white, "structure that generates ") .. c("#00ff66", "240,000 EU") .. c(white, " of power."))
 
 	y = y + 0.2
 	line(c(white, "Fueled by ") .. c(teal, "6") .. c(white, " uranium fuel rods \xe2\x80\x94 each load runs for ") .. c(teal, "8 hours") .. c(white, "."))
-	line(c(white, "Requires ") .. c("#ffcc00", "50,000 EU") .. c(white, " from an HV network for jump start."))
+	line(c(white, "Requires ") .. c("#ffcc00", "85,000 EU") .. c(white, " from an HV network for jump start."))
 
 	y = y + 0.2
 	line(c(white, "Required blocks:"))
@@ -237,346 +175,107 @@ local function build_page_intro(fs)
 end
 
 -- ============================================================
+-- BUILD-STEP PAGE HELPER (pages 2–6)
+-- ============================================================
+-- Each page shows a large 3D model with legend and notes below.
+
+local function build_model_page(fs, title, page, legend, notes)
+	fs = page_header(fs, title)
+
+	-- Label above model
+	fs = fs .. "label[0.5,1.05;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
+
+	-- Large 3D model filling most of the page
+	fs = add_model(fs, page, 0.3, 1.2, 8.4, 5.8)
+
+	-- Legend below model
+	local legend_y = 7.2
+	fs = draw_legend(fs, legend, 0.6, legend_y)
+
+	-- Notes below legend
+	local note_y = legend_y + 0.5
+	if #legend > 4 then note_y = note_y + 0.4 end  -- extra row if legend wraps
+	for i, note in ipairs(notes) do
+		fs = fs .. "label[0.6," .. (note_y + (i - 1) * 0.4) .. ";"
+			.. minetest.formspec_escape(note) .. "]"
+	end
+
+	return fs
+end
+
+-- ============================================================
 -- PAGE 2: BASE PLATFORM (FLOOR)
 -- ============================================================
 
-local GRID_FLOOR = {
-	"PPPPPPPPPPPPP",  -- z=-6
-	"PS....S....SP",  -- z=-5
-	"P.....S.....P",  -- z=-4
-	"P.....S.....P",  -- z=-3
-	"P.....S.....P",  -- z=-2
-	"P....SSS....P",  -- z=-1
-	"PSSSSSSSSSSSP",  -- z= 0
-	"P....SSS....P",  -- z=+1
-	"P.....S.....P",  -- z=+2
-	"P.....S.....P",  -- z=+3
-	"P.....S.....P",  -- z=+4
-	"PS....S....SP",  -- z=+5
-	"PPPPPPPPPPPPP",  -- z=+6
-}
-
 local function build_page_floor(fs)
-	fs = page_header(fs, "Step 1: Base Platform (Bottom Layer)")
-
-	-- Top View label (left side)
-	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
-
-	-- 3D View label (right side)
-	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
-
-	-- 13x13 grid on the left, cell_size 0.20
-	local cell = 0.20
-	local gap = 0.02
-	local step = cell + gap
-	local start_x = 0.3
-	local start_y = 1.3
-	fs = draw_grid(fs, GRID_FLOOR, start_x, start_y, cell, gap)
-
-	-- 3D model on the right
-	fs = add_model(fs, 2, 4.0, 1.1, 4.5, 4.0)
-
-	-- Side View label
-	local side_label_y = 5.25
-	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	-- Side-view cross-section
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.18
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 2, side_x, side_y, side_cell)
-
-	-- Legend
-	local legend_y = side_y + 5 * side_step + 0.25
-	fs = draw_legend(fs, {
+	return build_model_page(fs, "Step 1: Base Platform (Bottom Layer)", 2, {
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, 0.6, legend_y)
-
-	-- Note
-	local note_y = legend_y + 0.5
-	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("13x13 square border of Pole Field with a Steel Block") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("cross and corner bolts inside. Build this layer first.") .. "]"
-
-	return fs
+	}, {
+		"13x13 square border of Pole Field with a Steel Block",
+		"cross and corner bolts inside. Build this layer first.",
+	})
 end
 
 -- ============================================================
 -- PAGE 3: WALL LAYERS
 -- ============================================================
 
-local GRID_WALLS = {
-	".............",  -- z=-6
-	".S..T.T.T..S.",  -- z=-5
-	"....T.T.T....",  -- z=-4
-	"....T.T.T....",  -- z=-3
-	".TTT..S..TTT.",  -- z=-2
-	".....PPP.....",  -- z=-1
-	".TTTSPaPSTTT.",  -- z= 0
-	".....PPP.....",  -- z=+1
-	".TTT..S..TTT.",  -- z=+2
-	"....T.T.T....",  -- z=+3
-	"....T.T.T....",  -- z=+4
-	".S..T.T.T..S.",  -- z=+5
-	".............",  -- z=+6
-}
-
 local function build_page_walls(fs)
-	fs = page_header(fs, "Step 2: Walls (Layers 2 & 4)")
-
-	-- Top View label (left side)
-	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
-
-	-- 3D View label (right side)
-	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
-
-	-- 13x13 grid on the left, cell_size 0.20
-	local cell = 0.20
-	local gap = 0.02
-	local step = cell + gap
-	local start_x = 0.3
-	local start_y = 1.3
-	fs = draw_grid(fs, GRID_WALLS, start_x, start_y, cell, gap)
-
-	-- 3D model on the right
-	fs = add_model(fs, 3, 4.0, 1.1, 4.5, 4.0)
-
-	-- Side View label
-	local side_label_y = 5.25
-	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	-- Side-view cross-section
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.18
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 3, side_x, side_y, side_cell)
-
-	-- Legend
-	local legend_y = side_y + 5 * side_step + 0.25
-	fs = draw_legend(fs, {
+	return build_model_page(fs, "Step 2: Walls (Layers 2 & 4)", 3, {
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, 0.6, legend_y)
-
-	-- Note
-	local note_y = legend_y + 0.5
-	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("Cross-shaped layout. Build two identical copies of this layer \xe2\x80\x94") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("one directly above the base, one directly below the roof.") .. "]"
-
-	return fs
+	}, {
+		"Cross-shaped layout. Build two identical copies of this layer \xe2\x80\x94",
+		"one directly above the base, one directly below the roof.",
+	})
 end
 
 -- ============================================================
 -- PAGE 4: REACTOR CORE (zoomed center)
 -- ============================================================
 
-local GRID_CORE = {
-	".T.T.T.",  -- z=-3
-	"T..S..T",  -- z=-2
-	"..PPP..",  -- z=-1
-	"TSP*PST",  -- z= 0
-	"..PPP..",  -- z=+1
-	"T..S..T",  -- z=+2
-	".T.T.T.",  -- z=+3
-}
-
 local function build_page_core(fs)
-	fs = page_header(fs, "Step 3: Reactor Core (Middle Layer Center)")
-
-	-- Top View label (left side)
-	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
-
-	-- 3D View label (right side)
-	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
-
-	-- 7x7 zoomed grid on the left, cell_size 0.38
-	local cell = 0.38
-	local gap = 0.02
-	local step = cell + gap
-	local start_x = 0.3
-	local start_y = 1.3
-	fs = draw_grid(fs, GRID_CORE, start_x, start_y, cell, gap)
-
-	-- 3D model on the right (full middle layer)
-	fs = add_model(fs, 4, 4.0, 1.1, 4.5, 4.0)
-
-	-- Side View label
-	local side_label_y = 5.25
-	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	-- Side-view cross-section
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.18
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 4, side_x, side_y, side_cell)
-
-	-- Legend
-	local legend_y = side_y + 5 * side_step + 0.25
-	fs = draw_legend(fs, {
+	return build_model_page(fs, "Step 3: Reactor Core (Middle Layer Center)", 4, {
 		{color = "#cc44ff", label = "Pole Corrector", width = 2.2},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, 0.6, legend_y)
-
-	-- Note
-	local note_y = legend_y + 0.5
-	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("3x3 Pole Field ring with Pole Corrector at the exact center.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("Steel Blocks connect the core to the outer Toroid walls.") .. "]"
-
-	return fs
+	}, {
+		"3x3 Pole Field ring with Pole Corrector at the exact center.",
+		"Steel Blocks connect the core to the outer Toroid walls.",
+	})
 end
 
 -- ============================================================
 -- PAGE 5: PLASMA RING (full middle layer)
 -- ============================================================
 
-local GRID_PLASMA = {
-	".............",  -- z=-6
-	".SS.T.T.T.SS.",  -- z=-5
-	".SLCLLLLLLCS.",  -- z=-4
-	"..L.T.T.T.L..",  -- z=-3
-	".TLT..S..TLT.",  -- z=-2
-	"..L..PPP..L..",  -- z=-1
-	".TLTSP*PSTLT.",  -- z= 0
-	"..L..PPP..L..",  -- z=+1
-	".TLT..S..TLT.",  -- z=+2
-	"..C.T.T.T.L..",  -- z=+3
-	".SLLLLLLCLLS.",  -- z=+4
-	".SS.T.T.T.SS.",  -- z=+5
-	".............",  -- z=+6
-}
-
 local function build_page_plasma(fs)
-	fs = page_header(fs, "Step 4: Plasma Ring (Middle Layer Full)")
-
-	-- Top View label (left side)
-	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
-
-	-- 3D View label (right side)
-	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
-
-	-- 13x13 grid on the left, cell_size 0.20
-	local cell = 0.20
-	local gap = 0.02
-	local step = cell + gap
-	local start_x = 0.3
-	local start_y = 1.3
-	fs = draw_grid(fs, GRID_PLASMA, start_x, start_y, cell, gap)
-
-	-- 3D model on the right
-	fs = add_model(fs, 5, 4.0, 1.1, 4.5, 4.0)
-
-	-- Side View label
-	local side_label_y = 5.25
-	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	-- Side-view cross-section
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.18
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 5, side_x, side_y, side_cell)
-
-	-- Legend
-	local legend_y = side_y + 5 * side_step + 0.25
-	fs = draw_legend(fs, {
+	return build_model_page(fs, "Step 4: Plasma Ring (Middle Layer Full)", 5, {
 		{color = "#33cc33", label = "Plasma Field", width = 2.0},
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
-		{color = "#cc44ff", label = "Pole Corrector", width = 2.2},
+		{color = "#cc44ff", label = "Corrector", width = 1.6},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, 0.6, legend_y)
-
-	-- Note
-	local note_y = legend_y + 0.9
-	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("Green plasma ring loops around the outside of the cross.") .. "]"
-	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
-		.. minetest.formspec_escape("Steel Blocks at the outer corners.") .. "]"
-
-	return fs
+	}, {
+		"Green plasma ring loops around the outside.",
+		"Steel Blocks fill the outer corners.",
+	})
 end
 
 -- ============================================================
 -- PAGE 6: ROOF
 -- ============================================================
 
-local GRID_ROOF = {
-	"PPPPPPPPPPPPP",  -- z=-6
-	"PS.........SP",  -- z=-5
-	"P...........P",  -- z=-4
-	"P...........P",  -- z=-3
-	"P...........P",  -- z=-2
-	"P...........P",  -- z=-1
-	"P...........P",  -- z= 0
-	"P...........P",  -- z=+1
-	"P...........P",  -- z=+2
-	"P...........P",  -- z=+3
-	"P...........P",  -- z=+4
-	"PS.........SP",  -- z=+5
-	"PPPPPPPPPPPPP",  -- z=+6
-}
-
 local function build_page_roof(fs)
-	fs = page_header(fs, "Step 5: Roof (Top Layer)")
-
-	-- Top View label (left side)
-	fs = fs .. "label[0.3,1.15;" .. minetest.colorize("#aaaaaa", "Top View") .. "]"
-
-	-- 3D View label (right side)
-	fs = fs .. "label[4.0,1.0;" .. minetest.colorize("#aaaaaa", "3D View \xe2\x80\x94 click & drag to rotate") .. "]"
-
-	-- 13x13 grid on the left, cell_size 0.20
-	local cell = 0.20
-	local gap = 0.02
-	local step = cell + gap
-	local start_x = 0.3
-	local start_y = 1.3
-	fs = draw_grid(fs, GRID_ROOF, start_x, start_y, cell, gap)
-
-	-- 3D model on the right
-	fs = add_model(fs, 6, 4.0, 1.1, 4.5, 4.0)
-
-	-- Side View label
-	local side_label_y = 5.25
-	fs = fs .. "label[0.3," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	-- Side-view cross-section
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.18
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 6, side_x, side_y, side_cell)
-
-	-- Legend
-	local legend_y = side_y + 5 * side_step + 0.25
-	fs = draw_legend(fs, {
+	return build_model_page(fs, "Step 5: Roof (Top Layer)", 6, {
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, 0.6, legend_y)
-
-	-- Note
-	local note_y = legend_y + 0.5
-	fs = fs .. "label[0.6," .. note_y .. ";"
-		.. minetest.formspec_escape("Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.") .. "]"
-
-	return fs
+	}, {
+		"Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.",
+	})
 end
 
 -- ============================================================
@@ -584,11 +283,11 @@ end
 -- ============================================================
 
 local GRID_CONTROL = {
-	"..T..",
-	"..T..",
-	"KJTOT",
-	"..T..",
-	"..T..",
+	".T.",
+	".T.",
+	"JKO",
+	".T.",
+	".T.",
 }
 
 local function build_page_controls(fs)
@@ -617,31 +316,29 @@ local function build_page_controls(fs)
 	fs = fs .. "label[" .. (po_x + 0.25) .. "," .. (box_y + 0.38) .. ";Power Output]"
 
 	-- 5x5 side-view placement grid below
-	local ctx_cell = 0.4
-	local ctx_gap = 0.02
+	local ctx_cell = 0.5
+	local ctx_gap = 0.03
 	local ctx_step = ctx_cell + ctx_gap
-	local ctx_w = 5 * ctx_step
-	local ctx_x = (9 - ctx_w) / 2
-	local ctx_y = box_y + box_h + 0.5
+	local ctx_w = 3 * ctx_step  -- only 3 columns wide (JKO row)
+	local ctx_x = (9 - 5 * ctx_step) / 2
+	local ctx_y = box_y + box_h + 0.6
 	fs = draw_grid(fs, GRID_CONTROL, ctx_x, ctx_y, ctx_cell, ctx_gap)
 
 	-- Label for context grid
-	fs = fs .. "label[" .. ctx_x .. "," .. (ctx_y + 5 * ctx_step + 0.15) .. ";"
-		.. minetest.colorize("#aaaaaa", "Top-down placement view") .. "]"
+	fs = fs .. "label[" .. ctx_x .. "," .. (ctx_y - 0.25) .. ";"
+		.. minetest.colorize("#aaaaaa", "Side view \xe2\x80\x94 placement example") .. "]"
 
-	-- Side-view cross-section
-	local side_label_y = ctx_y + 5 * ctx_step + 0.5
-	fs = fs .. "label[0.6," .. side_label_y .. ";" .. minetest.colorize("#aaaaaa", "Side View") .. "]"
-
-	local side_y = side_label_y + 0.15
-	local side_cell = 0.20
-	local side_step = side_cell + 0.02
-	local side_w = 13 * side_step
-	local side_x = (9 - side_w) / 2
-	fs = draw_side_view(fs, 7, side_x, side_y, side_cell)
+	-- Legend
+	local legend_y = ctx_y + 5 * ctx_step + 0.35
+	fs = draw_legend(fs, {
+		{color = "#cc3399", label = "Control Panel", width = 2.2},
+		{color = "#ccaa00", label = "Jumpstarter", width = 2.0},
+		{color = "#cc6600", label = "Power Output", width = 2.0},
+		{color = "#00cccc", label = "Toroid Field", width = 2.0},
+	}, 0.6, legend_y)
 
 	-- Notes
-	local note_y = side_y + 5 * side_step + 0.25
+	local note_y = legend_y + 0.9
 	fs = fs .. "label[0.6," .. note_y .. ";"
 		.. minetest.formspec_escape("The Control Panel must touch a Toroid Field block.") .. "]"
 	fs = fs .. "label[0.6," .. (note_y + 0.4) .. ";"
@@ -669,7 +366,7 @@ local function build_page_startup(fs)
 	end
 
 	line(c("#ffffff", "1. Connect the Jumpstarter to an HV network"))
-	line(c("#aaaaaa", "   (needs ") .. c("#ffcc00", "50,000 EU") .. c("#aaaaaa", " stored)"))
+	line(c("#aaaaaa", "   (needs ") .. c("#ffcc00", "85,000 EU") .. c("#aaaaaa", " stored)"))
 
 	y = y + 0.15
 	line(c("#ffffff", "2. Right-click the Control Panel"))
@@ -684,7 +381,7 @@ local function build_page_startup(fs)
 
 	y = y + 0.15
 	line(c("#ffffff", "5. Click ") .. c("#00ccaa", "[Inject Fuel & Start]"))
-	line(c("#aaaaaa", "   Reactor activates \xe2\x80\x94 ") .. c("#00ff66", "140,000 EU") .. c("#aaaaaa", " output"))
+	line(c("#aaaaaa", "   Reactor activates \xe2\x80\x94 ") .. c("#00ff66", "240,000 EU") .. c("#aaaaaa", " output"))
 
 	y = y + 0.15
 	line(c("#ffffff", "6. Right-click the Power Output block"))
@@ -709,15 +406,13 @@ local function build_page_complete(fs)
 	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 3D View")
 
 	-- Large interactive 3D model of the full reactor
-	fs = fs .. "model[0.5,1.3;8.0,6.5;reactor_preview;"
-		.. "reactor_complete.obj;" .. MODEL_TEXTURES
-		.. ";25,-45;false;true]"
+	fs = add_model(fs, 9, 0.3, 1.2, 8.4, 6.8, 25, -45)
 
 	-- Rotate hint
-	fs = fs .. "label[2.8,7.95;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
+	fs = fs .. "label[2.8,8.15;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
 
 	-- Condensed legend
-	local legend_y = 8.3
+	local legend_y = 8.5
 	fs = draw_legend(fs, {
 		{color = "#e86400", label = "Pole", width = 1.1},
 		{color = "#00cccc", label = "Toroid", width = 1.3},
@@ -725,10 +420,6 @@ local function build_page_complete(fs)
 		{color = "#cc44ff", label = "Corrector", width = 1.6},
 		{color = "#888888", label = "Steel", width = 1.2},
 	}, 0.6, legend_y)
-
-	-- Note
-	fs = fs .. "label[0.6,8.75;"
-		.. minetest.formspec_escape("5 layers, 13x13 cross shape. Build from the base up.") .. "]"
 
 	return fs
 end
