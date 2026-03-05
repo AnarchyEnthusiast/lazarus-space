@@ -7,7 +7,7 @@
 
 local FUEL_SLOTS = 6
 local FUEL_ITEM = "technic:uranium_fuel"
-local FUEL_DURATION = 30 * 60 -- 30 minutes total for 6 rods
+local FUEL_DURATION = 8 * 60 * 60 -- 8 hours total for 6 rods
 local CHARGE_TIME = 5 -- 5-second countdown
 local POWER_OUTPUT = 140000 -- 140,000 EU
 local JUMPSTART_ENERGY = 50000 -- HV energy needed to jumpstart
@@ -243,6 +243,18 @@ end
 -- FORMSPEC BUILDERS
 -- ============================================================
 
+-- Helper: format seconds as h:mm:ss or m:ss
+local function format_time(seconds)
+	local hours = math.floor(seconds / 3600)
+	local mins = math.floor((seconds % 3600) / 60)
+	local secs = seconds % 60
+	if hours > 0 then
+		return string.format("%d:%02d:%02d", hours, mins, secs)
+	else
+		return string.format("%d:%02d", mins, secs)
+	end
+end
+
 -- Helper: style[] + button[] for colored buttons (no border boxes)
 local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, text)
 	text = text or "#ffffff"
@@ -284,9 +296,9 @@ local function build_unchecked_formspec()
 	local fs = "size[9,4]"
 		.. "bgcolor[#080808;true]"
 		.. "box[0,0;8.8,0.8;#1a1a2e]"
-		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		.. "label[3.4,0.2;Magnetic Fusion Reactor]"
 		.. "box[0,1;8.8,0.6;#0a0a15]"
-		.. "label[2.5,1.1;Structure Check Required]"
+		.. "label[3.4,1.1;Structure Check Required]"
 	fs = styled_btn(fs, 2.5, 2.2, 4, 0.7, "check_structure", "Check Structure",
 		"#00ccaa", "#00ddbb", "#009988")
 	return fs
@@ -296,7 +308,7 @@ local function build_error_formspec(errors)
 	local fs = "size[9,7]"
 		.. "bgcolor[#080808;true]"
 		.. "box[0,0;8.8,0.8;#1a1a2e]"
-		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		.. "label[3.4,0.2;Magnetic Fusion Reactor]"
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "Structure Check Failed") .. "]"
 
@@ -371,7 +383,7 @@ local function build_reactor_formspec(pos)
 		.. "listcolors[#1a1a2e;#2a2a3e;#333355]"
 		-- Header
 		.. "box[0,0;8.8,0.8;#1a1a2e]"
-		.. "label[2.5,0.2;Magnetic Fusion Reactor]"
+		.. "label[3.4,0.2;Magnetic Fusion Reactor]"
 		-- Status
 		.. "box[0,1;8.8,0.6;#0a0a15]"
 		.. "label[0.3,1.1;Status: " .. status_text .. "]"
@@ -393,8 +405,6 @@ local function build_reactor_formspec(pos)
 	end
 
 	if state == "active" then
-		local mins = math.floor(fuel_time / 60)
-		local secs = fuel_time % 60
 		-- Get output tier from power output block
 		local output_tier = "HV"
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -406,7 +416,7 @@ local function build_reactor_formspec(pos)
 		fs = fs .. "label[0.3,5.1;Output: " .. minetest.colorize("#00ccaa", "140,000 EU")
 			.. " (" .. output_tier .. ")]"
 		-- Fuel remaining with gradient drain bar
-		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. string.format("%d:%02d", mins, secs) .. "]"
+		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. format_time(fuel_time) .. "]"
 		local fuel_pct = math.floor(fuel_time / FUEL_DURATION * 100)
 		fs = gradient_bar(fs, 0.5, 6.3, 7.8, 0.4, fuel_pct)
 	end
@@ -526,7 +536,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		-- Activate reactor
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", FUEL_DURATION)
-
+		meta:set_int("display_accumulator", 0)
 
 		-- Notify power output — update infotext immediately
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -552,7 +562,7 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", remaining)
 		meta:set_int("remaining_fuel_time", 0)
-
+		meta:set_int("display_accumulator", 0)
 
 		-- Notify power output
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -651,8 +661,6 @@ local function panel_on_timer(pos, elapsed)
 	end
 
 	-- Active reactor: decrement fuel time
-	-- Do NOT rebuild formspec here — async rebuilds steal button clicks.
-	-- Formspec only rebuilds on user actions (on_receive_fields) or state transitions.
 	if state == "active" then
 		local ft = meta:get_int("fuel_time") - 1
 		if ft <= 0 then
@@ -671,11 +679,16 @@ local function panel_on_timer(pos, elapsed)
 			meta:set_string("formspec", build_reactor_formspec(pos))
 		else
 			meta:set_int("fuel_time", ft)
-			-- Only update infotext (hover text) — does not invalidate open formspec
-			local mins = math.floor(ft / 60)
-			local secs = ft % 60
+			-- Update infotext every second (does not invalidate open formspec)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Active ("
-				.. string.format("%d:%02d", mins, secs) .. ")")
+				.. format_time(ft) .. ")")
+			-- Rebuild formspec every 30 seconds for fuel display
+			local display_acc = meta:get_int("display_accumulator") + 1
+			if display_acc >= 30 then
+				display_acc = 0
+				meta:set_string("formspec", build_reactor_formspec(pos))
+			end
+			meta:set_int("display_accumulator", display_acc)
 		end
 		return true
 	end
