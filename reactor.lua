@@ -243,17 +243,20 @@ end
 -- FORMSPEC BUILDERS
 -- ============================================================
 
--- Helper: render a button with a thin border outline (no filled backdrop)
+-- Helper: render a button with a centered thin border outline
+-- ox/oy correct for Minetest button internal rendering offset
 local function btn(fs, x, y, w, h, name, label, color)
 	local t = 0.05
+	local ox, oy = -0.05, -0.05
+	local bx, by = x + ox, y + oy
 	-- Top edge
-	fs = fs .. "box[" .. (x-t) .. "," .. (y-t) .. ";" .. (w+t*2) .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. w .. "," .. t .. ";" .. color .. "]"
 	-- Bottom edge
-	fs = fs .. "box[" .. (x-t) .. "," .. (y+h) .. ";" .. (w+t*2) .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. bx .. "," .. (by + h) .. ";" .. w .. "," .. t .. ";" .. color .. "]"
 	-- Left edge
-	fs = fs .. "box[" .. (x-t) .. "," .. (y-t) .. ";" .. t .. "," .. (h+t*2) .. ";" .. color .. "]"
+	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
 	-- Right edge
-	fs = fs .. "box[" .. (x+w) .. "," .. (y-t) .. ";" .. t .. "," .. (h+t*2) .. ";" .. color .. "]"
+	fs = fs .. "box[" .. (bx + w) .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
 	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
 	return fs
 end
@@ -319,13 +322,15 @@ local function build_reactor_formspec(pos)
 	if state == "" then state = "standby" end
 	local charge_timer = meta:get_int("charge_timer")
 	local fuel_time = meta:get_int("fuel_time")
-	-- Count fuel rods
+	-- Count fuel rods and filled slots
 	local inv = meta:get_inventory()
 	local fuel_count = 0
+	local filled_slots = 0
 	for i = 1, FUEL_SLOTS do
 		local stack = inv:get_stack("fuel", i)
-		if stack:get_name() == FUEL_ITEM then
+		if stack:get_name() == FUEL_ITEM and stack:get_count() > 0 then
 			fuel_count = fuel_count + stack:get_count()
+			filled_slots = filled_slots + 1
 		end
 	end
 
@@ -364,7 +369,7 @@ local function build_reactor_formspec(pos)
 		js_progress = 100
 	end
 
-	local fs = "size[9,10.5]"
+	local fs = "size[9,12.5]"
 		.. "bgcolor[#080808;true]"
 		.. "listcolors[#1a1a2e;#2a2a3e;#333355]"
 		-- Header
@@ -420,17 +425,23 @@ local function build_reactor_formspec(pos)
 		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
 			"Jump Starting... " .. charge_timer .. "s") .. "]"
 	elseif state == "jump_started" then
-		if fuel_count >= FUEL_SLOTS then
+		local remaining = meta:get_int("remaining_fuel_time")
+		if remaining > 0 then
+			-- Resume with stored fuel time — no rods needed
+			fs = btn(fs, 1.5, 5.8, 6, 0.7, "resume", "Resume Reactor", "#00ff66")
+		elseif filled_slots >= FUEL_SLOTS then
 			fs = btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start", "#00ff66")
 		else
 			fs = fs .. "label[1.5,5.9;" .. minetest.colorize("#666666",
-				"Inject Fuel & Start (need " .. (FUEL_SLOTS - fuel_count) .. " more rods)") .. "]"
+				"Inject Fuel & Start (need 1 rod in each of " .. FUEL_SLOTS .. " slots)") .. "]"
 		end
+	elseif state == "active" then
+		fs = btn(fs, 2.0, 7.0, 5, 0.7, "deactivate", "Deactivate Reactor", "#cc3333")
 	end
 
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0.5,7;8,1;]"
-		.. "list[current_player;main;0.5,8.2;8,3;8]"
+	fs = fs .. "list[current_player;main;0.5,8;8,1;]"
+		.. "list[current_player;main;0.5,9.2;8,3;8]"
 		.. "listring[context;fuel]"
 		.. "listring[current_player;main]"
 
@@ -489,20 +500,20 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		local state = meta:get_string("reactor_state")
 		if state ~= "jump_started" then return end
 
-		-- Verify all fuel rods are loaded
+		-- Verify each slot has at least 1 fuel rod
 		local inv = meta:get_inventory()
-		local fuel_count = 0
 		for i = 1, FUEL_SLOTS do
 			local stack = inv:get_stack("fuel", i)
-			if stack:get_name() == FUEL_ITEM then
-				fuel_count = fuel_count + stack:get_count()
+			if stack:get_name() ~= FUEL_ITEM or stack:get_count() < 1 then
+				return -- every slot must have at least 1 rod
 			end
 		end
-		if fuel_count < FUEL_SLOTS then return end
 
-		-- Consume fuel rods
+		-- Consume exactly 1 fuel rod from each slot
 		for i = 1, FUEL_SLOTS do
-			inv:set_stack("fuel", i, "")
+			local stack = inv:get_stack("fuel", i)
+			stack:take_item(1)
+			inv:set_stack("fuel", i, stack)
 		end
 
 		-- Activate reactor
@@ -517,6 +528,55 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 			if tier == "" then tier = "HV" end
 			po_meta:set_string("infotext", "Fusion Power Output - "
 				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+		end
+
+		meta:set_string("formspec", build_reactor_formspec(pos))
+		return
+	end
+
+	if fields.resume then
+		local state = meta:get_string("reactor_state")
+		if state ~= "jump_started" then return end
+		local remaining = meta:get_int("remaining_fuel_time")
+		if remaining <= 0 then return end
+
+		-- Resume reactor with stored fuel time
+		meta:set_string("reactor_state", "active")
+		meta:set_int("fuel_time", remaining)
+		meta:set_int("remaining_fuel_time", 0)
+
+		-- Notify power output
+		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
+		if po_pos then
+			local po_meta = minetest.get_meta(po_pos)
+			local tier = po_meta:get_string("output_tier")
+			if tier == "" then tier = "HV" end
+			po_meta:set_string("infotext", "Fusion Power Output - "
+				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+		end
+
+		meta:set_string("formspec", build_reactor_formspec(pos))
+		return
+	end
+
+	if fields.deactivate then
+		local state = meta:get_string("reactor_state")
+		if state ~= "active" then return end
+
+		-- Store remaining fuel time for later resume
+		local ft = meta:get_int("fuel_time")
+		meta:set_int("remaining_fuel_time", ft)
+
+		-- Shut down gracefully to standby
+		meta:set_string("reactor_state", "standby")
+		meta:set_int("fuel_time", 0)
+		meta:set_string("infotext", "Magnetic Fusion Reactor — Standby")
+
+		-- Notify power output
+		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
+		if po_pos then
+			local po_meta = minetest.get_meta(po_pos)
+			po_meta:set_string("infotext", "Fusion Power Output - Offline")
 		end
 
 		meta:set_string("formspec", build_reactor_formspec(pos))
