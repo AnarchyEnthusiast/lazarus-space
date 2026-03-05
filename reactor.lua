@@ -244,25 +244,41 @@ end
 -- ============================================================
 
 -- Helper: render a button with a centered thin border outline
--- ox/oy correct for Minetest button internal rendering offset
--- wc shrinks border width to match actual button render width
+-- Calibrated offsets measured from red-box overlay test (see CALIBRATION below).
+-- Each offset = distance from formspec coord to visible button edge.
+-- To recalibrate: temporarily use build_calibration_formspec() on the control panel,
+-- compare red box edges to button edges in-game, adjust values, then restore.
+local BTN_LEFT  = -0.05   -- border left edge relative to button x
+local BTN_TOP   = -0.05   -- border top edge relative to button y
+local BTN_RIGHT = -0.15   -- border right edge relative to button x+w
+local BTN_BOT   = -0.05   -- border bottom edge relative to button y+h
+
 local function btn(fs, x, y, w, h, name, label, color)
 	local t = 0.05
-	local ox, oy = -0.05, -0.05
-	local wc = -0.1
-	local bx, by = x + ox, y + oy
-	local bw = w + wc
+	local lx = x + BTN_LEFT
+	local ty = y + BTN_TOP
+	local bw = w + BTN_RIGHT - BTN_LEFT
+	local bh = h + BTN_BOT - BTN_TOP
 	-- Top edge
-	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. lx .. "," .. ty .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
 	-- Bottom edge
-	fs = fs .. "box[" .. bx .. "," .. (by + h) .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
+	fs = fs .. "box[" .. lx .. "," .. (ty + bh) .. ";" .. bw .. "," .. t .. ";" .. color .. "]"
 	-- Left edge
-	fs = fs .. "box[" .. bx .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
+	fs = fs .. "box[" .. lx .. "," .. ty .. ";" .. t .. "," .. bh .. ";" .. color .. "]"
 	-- Right edge
-	fs = fs .. "box[" .. (bx + bw) .. "," .. by .. ";" .. t .. "," .. h .. ";" .. color .. "]"
+	fs = fs .. "box[" .. (lx + bw) .. "," .. ty .. ";" .. t .. "," .. bh .. ";" .. color .. "]"
 	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h .. ";" .. name .. ";" .. label .. "]"
 	return fs
 end
+
+-- CALIBRATION: Uncomment this function and use it as the control panel formspec
+-- to measure the exact offset between box edges and button edges in-game.
+-- local function build_calibration_formspec()
+-- 	return "size[6,4]"
+-- 		.. "bgcolor[#080808;true]"
+-- 		.. "box[2,1.5;2,1;#ff0000]"
+-- 		.. "button[2,1.5;2,1;test;Test Button]"
+-- end
 
 -- Helper: render a gradient progress bar (3-strip: bright top, base middle, dark bottom)
 -- Strips overlap by 0.02 units to prevent black lines from floating point gaps.
@@ -323,7 +339,6 @@ local function build_reactor_formspec(pos)
 	local meta = minetest.get_meta(pos)
 	local state = meta:get_string("reactor_state")
 	if state == "" then state = "standby" end
-	local charge_timer = meta:get_int("charge_timer")
 	local fuel_time = meta:get_int("fuel_time")
 	-- Count fuel rods and filled slots
 	local inv = meta:get_inventory()
@@ -364,10 +379,11 @@ local function build_reactor_formspec(pos)
 		status_text = state
 	end
 
-	-- Jump start progress
+	-- Jump start progress (smooth: js_elapsed is a float updated every 0.1s)
 	local js_progress = 0
 	if state == "jump_starting" then
-		js_progress = math.floor((CHARGE_TIME - charge_timer) / CHARGE_TIME * 100)
+		local js_elapsed = meta:get_float("js_elapsed")
+		js_progress = math.min(100, math.floor(js_elapsed / CHARGE_TIME * 100))
 	elseif state == "jump_started" or state == "active" then
 		js_progress = 100
 	end
@@ -425,8 +441,10 @@ local function build_reactor_formspec(pos)
 			fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#666666", "Jump Start (HV not ready)") .. "]"
 		end
 	elseif state == "jump_starting" then
+		local js_elapsed = meta:get_float("js_elapsed")
+		local js_remaining = math.max(0, CHARGE_TIME - js_elapsed)
 		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
-			"Jump Starting... " .. charge_timer .. "s") .. "]"
+			"Jump Starting... " .. string.format("%.1fs", js_remaining)) .. "]"
 	elseif state == "jump_started" then
 		local remaining = meta:get_int("remaining_fuel_time")
 		if remaining > 0 then
@@ -488,13 +506,15 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 
 		-- Start jump start sequence
 		meta:set_string("reactor_state", "jump_starting")
-		meta:set_int("charge_timer", CHARGE_TIME)
+		meta:set_float("js_elapsed", 0)
 
 		-- Drain jumpstarter energy
 		local stored = js_meta:get_int("stored_energy")
 		js_meta:set_int("stored_energy", math.max(0, stored - JUMPSTART_ENERGY))
 
-		-- Timer is already running from validation
+		-- Fast timer for smooth progress bar (0.1s ticks)
+		local timer = minetest.get_node_timer(pos)
+		timer:start(0.1)
 		meta:set_string("formspec", build_reactor_formspec(pos))
 		return
 	end
@@ -607,7 +627,7 @@ local function panel_on_timer(pos, elapsed)
 				-- Structure broken — invalidate
 				meta:set_string("validated", "")
 				meta:set_string("reactor_state", "")
-				meta:set_int("charge_timer", 0)
+				meta:set_float("js_elapsed", 0)
 
 				-- Shut down power output — update infotext
 				local po_pos = find_neighbor(pos,
@@ -623,17 +643,22 @@ local function panel_on_timer(pos, elapsed)
 		meta:set_float("check_accumulator", check_acc)
 	end
 
-	-- Jump start countdown (fuel not required during jump start)
+	-- Jump start countdown — 0.1s ticks for smooth progress bar
 	if state == "jump_starting" then
-		local ct = meta:get_int("charge_timer") - 1
+		local js_elapsed = meta:get_float("js_elapsed") + elapsed
+		meta:set_float("js_elapsed", js_elapsed)
 
-		if ct <= 0 then
+		if js_elapsed >= CHARGE_TIME then
 			meta:set_string("reactor_state", "jump_started")
-			meta:set_int("charge_timer", 0)
+			meta:set_float("js_elapsed", 0)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Start Complete")
+			-- Switch back to 1s timer for normal operation
+			local timer = minetest.get_node_timer(pos)
+			timer:start(1)
 		else
-			meta:set_int("charge_timer", ct)
-			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Starting... " .. ct .. "s")
+			local remaining = CHARGE_TIME - js_elapsed
+			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Starting... "
+				.. string.format("%.1fs", remaining))
 		end
 		meta:set_string("formspec", build_reactor_formspec(pos))
 		return true
@@ -714,13 +739,14 @@ function lazarus_space.check_plasma_corner(pos)
 	end
 	if not (has_x and has_z) then return end
 
-	-- Corner nodebox at facedir 0: arms along -X and +Z
-	-- Map direction pairs to corner param2
+	-- Corner nodebox at param2=0: arms along -X and +Z
+	-- Facedir rotation (x'=z, z'=-x per step):
+	--   param2=0: -X, +Z | param2=1: +X, +Z | param2=2: +X, -Z | param2=3: -X, -Z
 	local corner_map = {
 		["-x+z"] = 0,
-		["-x-z"] = 1,
+		["+x+z"] = 1,
 		["+x-z"] = 2,
-		["+x+z"] = 3,
+		["-x-z"] = 3,
 	}
 	local key = x_dir .. z_dir
 	local param2 = corner_map[key] or 0
@@ -729,6 +755,43 @@ function lazarus_space.check_plasma_corner(pos)
 		name = PFC,
 		param2 = param2,
 	})
+end
+
+-- Recheck a corner piece — revert to straight if it no longer has 2 perpendicular neighbors.
+function lazarus_space.recheck_corner(pos)
+	local node = minetest.get_node(pos)
+	if node.name ~= "lazarus_space:plasma_field_corner" then return end
+
+	local PF = "lazarus_space:plasma_field"
+	local PFC = "lazarus_space:plasma_field_corner"
+	local dirs = {
+		{x=1,  y=0, z=0,  label="+x"},
+		{x=-1, y=0, z=0,  label="-x"},
+		{x=0,  y=0, z=1,  label="+z"},
+		{x=0,  y=0, z=-1, label="-z"},
+	}
+
+	local has_x, has_z = false, false
+	local x_dir
+	for _, d in ipairs(dirs) do
+		local npos = vector.add(pos, d)
+		local nn = minetest.get_node(npos).name
+		if nn == PF or nn == PFC then
+			if d.label == "+x" or d.label == "-x" then
+				has_x = true; x_dir = d.label
+			elseif d.label == "+z" or d.label == "-z" then
+				has_z = true
+			end
+		end
+	end
+
+	-- Still has perpendicular neighbors — stay as corner
+	if has_x and has_z then return end
+
+	-- Revert to straight piece with correct orientation
+	local param2 = 0  -- default: along Z axis
+	if x_dir then param2 = 1 end  -- has X neighbor: orient along X
+	minetest.set_node(pos, {name = PF, param2 = param2})
 end
 
 -- ============================================================
@@ -790,6 +853,20 @@ minetest.register_node("lazarus_space:plasma_field", {
 			end
 		end
 	end,
+
+	after_dig_node = function(pos, oldnode, oldmeta, digger)
+		-- Neighbors may need to revert from corner to straight
+		local horiz = {
+			{x=1,y=0,z=0}, {x=-1,y=0,z=0},
+			{x=0,y=0,z=1}, {x=0,y=0,z=-1},
+		}
+		for _, d in ipairs(horiz) do
+			local npos = vector.add(pos, d)
+			if minetest.get_node(npos).name == "lazarus_space:plasma_field_corner" then
+				lazarus_space.recheck_corner(npos)
+			end
+		end
+	end,
 })
 
 -- ---- Plasma Field Corner ----
@@ -814,6 +891,19 @@ minetest.register_node("lazarus_space:plasma_field_corner", {
 	light_source = 5,
 	drop = "lazarus_space:plasma_field",
 	sounds = default.node_sound_metal_defaults(),
+
+	after_dig_node = function(pos, oldnode, oldmeta, digger)
+		local horiz = {
+			{x=1,y=0,z=0}, {x=-1,y=0,z=0},
+			{x=0,y=0,z=1}, {x=0,y=0,z=-1},
+		}
+		for _, d in ipairs(horiz) do
+			local npos = vector.add(pos, d)
+			if minetest.get_node(npos).name == "lazarus_space:plasma_field_corner" then
+				lazarus_space.recheck_corner(npos)
+			end
+		end
+	end,
 })
 
 -- ---- Pole Corrector ----
