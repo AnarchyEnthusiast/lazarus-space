@@ -537,6 +537,9 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", FUEL_DURATION)
 		meta:set_int("display_accumulator", 0)
+		-- Reset timer to 1s ticks (was 0.1s during jump start)
+		local timer = minetest.get_node_timer(pos)
+		timer:start(1)
 
 		-- Notify power output — update infotext immediately
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
@@ -563,6 +566,9 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 		meta:set_int("fuel_time", remaining)
 		meta:set_int("remaining_fuel_time", 0)
 		meta:set_int("display_accumulator", 0)
+		-- Reset timer to 1s ticks (was 0.1s during jump start)
+		local timer = minetest.get_node_timer(pos)
+		timer:start(1)
 
 		-- Notify power output
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
