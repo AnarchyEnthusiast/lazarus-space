@@ -263,11 +263,11 @@ end
 
 
 local GRID_CONTROL = {
-	".T.",
-	".T.",
+	"...",
+	"...",
 	"JKO",
-	".T.",
-	".T.",
+	"...",
+	"...",
 }
 
 local function build_page_controls(fs)
@@ -314,7 +314,6 @@ local function build_page_controls(fs)
 		{color = "#cc3399", label = "Control Panel", width = 2.2},
 		{color = "#ccaa00", label = "Jumpstarter", width = 2.0},
 		{color = "#cc6600", label = "Power Output", width = 2.0},
-		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 	}, 0.6, legend_y)
 
 	-- Notes
