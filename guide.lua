@@ -95,10 +95,10 @@ local function page_header(fs, title)
 end
 
 -- ============================================================
--- 3D MODEL HELPER — texture atlas approach
+-- 3D MODEL HELPER — multi-material approach
 -- ============================================================
--- All models use a single material. UV coords point to the correct
--- tile in an 80x16 pre-generated atlas PNG (no [combine at runtime).
+-- Each .obj declares 5 materials in fixed order. The model[] element
+-- maps comma-separated textures to material groups by index.
 
 local PAGE_MODELS = {
 	[2] = "reactor_layer_floor.obj",
@@ -108,8 +108,12 @@ local PAGE_MODELS = {
 	[6] = "reactor_complete.obj",
 }
 
--- Pre-generated 80x16 atlas PNG (avoids [combine commas breaking model[] parsing)
-local MODEL_TEXTURE = "lazarus_space_reactor_atlas.png"
+-- 5 textures in material order (must match MATERIAL_ORDER in generate_models.py)
+local MODEL_TEXTURE = "lazarus_space_pole_field.png"
+	.. ",lazarus_space_toroid_field.png"
+	.. ",default_steel_block.png"
+	.. ",lazarus_space_plasma_field.png"
+	.. ",lazarus_space_pole_corrector.png"
 
 local function add_model(fs, page, x, y, w, h, rot_x, rot_y)
 	local mesh = PAGE_MODELS[page]
