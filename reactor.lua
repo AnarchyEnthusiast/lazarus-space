@@ -1,16 +1,12 @@
 -- Lazarus Space: Magnetic Fusion Reactor
--- 13x13x5 multiblock structure with jump start sequence and power output.
+-- Tiered multiblock structures (Tier 1: 9x9x5, Tier 2: 13x13x5, Tier 3: 17x17x5)
+-- with jump start sequence and power output.
 
 -- ============================================================
 -- CONSTANTS
 -- ============================================================
 
-local FUEL_SLOTS = 6
 local FUEL_ITEM = "technic:uranium_fuel"
-local FUEL_DURATION = 8 * 60 * 60 -- 8 hours total for 6 rods
-local CHARGE_TIME = 5 -- 5-second countdown
-local POWER_OUTPUT = 240000 -- 240,000 EU
-local JUMPSTART_ENERGY = 85000 -- HV energy needed to jumpstart
 local STRUCTURE_CHECK_INTERVAL = 3 -- seconds between integrity checks
 
 -- ============================================================
@@ -50,18 +46,10 @@ local function find_neighbor(pos, target_name)
 end
 
 -- ============================================================
--- MULTIBLOCK STRUCTURE DEFINITION
+-- MULTIBLOCK STRUCTURE DEFINITIONS (3 tiers)
 -- ============================================================
--- Generated from /home/dev/MGMT/reference/reactor2.mts schematic.
--- 13x13x5 cross shape. Offsets relative to the pole_corrector at (0,0,0).
+-- Offsets relative to the pole_corrector at (0,0,0).
 -- Floor at y=-2, Roof at y=+2, middle layers y=-1,0,+1.
--- 314 total blocks: 120 PF, 96 TF, 65 SB, 28 PLF, 4 PLC, 1 PC, + 3 enforced air.
-
-local STRUCTURE = {}
-
-local function S(dx, dy, dz, node)
-	STRUCTURE[#STRUCTURE+1] = {x=dx, y=dy, z=dz, node=node}
-end
 
 local PF  = "lazarus_space:pole_field"
 local TF  = "lazarus_space:toroid_field"
@@ -71,92 +59,286 @@ local PC  = "lazarus_space:pole_corrector"
 local SB  = "default:steelblock"
 local AIR = "air"
 
--- ---- FLOOR (y = -2): pole_field border, steelblock interior grid ----
--- Outer ring of pole_field
-for i = -6, 6 do S(i,-2,-6, PF); S(i,-2, 6, PF) end  -- north/south rows
-for i = -5, 5 do S(-6,-2, i, PF); S( 6,-2, i, PF) end -- west/east columns
--- Steelblock cross at arm positions (center row/col z=0, and arm edges)
-S( 0,-2, 0, SB)
--- z=0 row: full steelblock spine
-for i = -5, 5 do S(i,-2, 0, SB) end
--- x=0 column: full steelblock spine
-for i = -5, 5 do if i ~= 0 then S(0,-2, i, SB) end end
--- Corner steelblock pairs at (+-5, +-5) and 3x3 center steelblock ring
-for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],-2,c[2], SB) end
--- 3x3 steelblock ring around center at z=+-1, x=+-1
-S(-1,-2,-1, SB); S( 0,-2,-1, SB); S( 1,-2,-1, SB)
-S(-1,-2, 1, SB); S( 0,-2, 1, SB); S( 1,-2, 1, SB)
-
--- ---- ROOF (y = +2): pole_field border, steelblock corners, air center ----
-for i = -6, 6 do S(i, 2,-6, PF); S(i, 2, 6, PF) end
-for i = -5, 5 do S(-6, 2, i, PF); S( 6, 2, i, PF) end
-for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1], 2,c[2], SB) end
-S(0, 2, 0, AIR) -- air above pole corrector
-
--- ---- MIDDLE LAYERS y=-1 and y=+1 (symmetric): toroid walls, steelblock transitions ----
-for _, dy in ipairs({-1, 1}) do
-	-- Corner steelblocks
-	for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],dy,c[2], SB) end
-	-- North/South arm toroid walls (3 columns: x=-2, 0, +2)
-	for _, dz in ipairs({-5,-4,-3, 3,4,5}) do
-		S(-2,dy,dz, TF); S(0,dy,dz, TF); S(2,dy,dz, TF)
+-- ---- Tier 1 structure: 9x9x5 (157 entries) ----
+local STRUCTURE_T1 = {}
+do
+	local function S(dx, dy, dz, node)
+		STRUCTURE_T1[#STRUCTURE_T1+1] = {x=dx, y=dy, z=dz, node=node}
 	end
-	-- East/West arm toroid walls (3 rows: z=-2, 0, +2)
-	-- But NOT overlapping the N/S arm ranges
-	S(-5,dy,-2, TF); S(-4,dy,-2, TF); S(-3,dy,-2, TF)
-	S( 3,dy,-2, TF); S( 4,dy,-2, TF); S( 5,dy,-2, TF)
-	S(-5,dy, 0, TF); S(-4,dy, 0, TF); S(-3,dy, 0, TF)
-	S( 3,dy, 0, TF); S( 4,dy, 0, TF); S( 5,dy, 0, TF)
-	S(-5,dy, 2, TF); S(-4,dy, 2, TF); S(-3,dy, 2, TF)
-	S( 3,dy, 2, TF); S( 4,dy, 2, TF); S( 5,dy, 2, TF)
-	-- Steel block transitions at arm-to-center boundary
-	S(-2,dy, 0, SB); S( 2,dy, 0, SB)
-	S( 0,dy,-2, SB); S( 0,dy, 2, SB)
-	-- Center 3x3: pole field ring with air at (0,0)
-	S(-1,dy,-1, PF); S( 0,dy,-1, PF); S( 1,dy,-1, PF)
-	S(-1,dy, 0, PF);                   S( 1,dy, 0, PF)
-	S(-1,dy, 1, PF); S( 0,dy, 1, PF); S( 1,dy, 1, PF)
-	-- Air above/below pole corrector
-	S(0,dy, 0, AIR)
+	-- FLOOR (y = -2)
+	S(-4,-2,-4, PF); S(-3,-2,-4, PF); S(-2,-2,-4, PF); S(-1,-2,-4, PF)
+	S( 0,-2,-4, PF); S( 1,-2,-4, PF); S( 2,-2,-4, PF); S( 3,-2,-4, PF); S( 4,-2,-4, PF)
+	S(-4,-2,-3, PF); S(-3,-2,-3, SB); S( 0,-2,-3, SB); S( 3,-2,-3, SB); S( 4,-2,-3, PF)
+	S(-4,-2,-2, PF); S( 0,-2,-2, SB); S( 4,-2,-2, PF)
+	S(-4,-2,-1, PF); S( 0,-2,-1, SB); S( 4,-2,-1, PF)
+	S(-4,-2, 0, PF); S(-3,-2, 0, SB); S(-2,-2, 0, SB); S(-1,-2, 0, SB)
+	S( 0,-2, 0, SB); S( 1,-2, 0, SB); S( 2,-2, 0, SB); S( 3,-2, 0, SB); S( 4,-2, 0, PF)
+	S(-4,-2, 1, PF); S( 0,-2, 1, SB); S( 4,-2, 1, PF)
+	S(-4,-2, 2, PF); S( 0,-2, 2, SB); S( 4,-2, 2, PF)
+	S(-4,-2, 3, PF); S(-3,-2, 3, SB); S( 0,-2, 3, SB); S( 3,-2, 3, SB); S( 4,-2, 3, PF)
+	S(-4,-2, 4, PF); S(-3,-2, 4, PF); S(-2,-2, 4, PF); S(-1,-2, 4, PF)
+	S( 0,-2, 4, PF); S( 1,-2, 4, PF); S( 2,-2, 4, PF); S( 3,-2, 4, PF); S( 4,-2, 4, PF)
+	-- WALL (lower) (y = -1)
+	S(-3,-1,-3, SB); S( 0,-1,-3, TF); S( 3,-1,-3, SB)
+	S( 0,-1,-2, TF); S( 0,-1,-1, TF)
+	S(-3,-1, 0, TF); S(-2,-1, 0, TF); S(-1,-1, 0, TF); S( 0,-1, 0, AIR)
+	S( 1,-1, 0, TF); S( 2,-1, 0, TF); S( 3,-1, 0, TF)
+	S( 0,-1, 1, TF); S( 0,-1, 2, TF)
+	S(-3,-1, 3, SB); S( 0,-1, 3, TF); S( 3,-1, 3, SB)
+	-- MIDDLE (y = 0)
+	S(-3, 0,-3, SB); S(-2, 0,-3, SB); S( 0, 0,-3, TF); S( 2, 0,-3, SB); S( 3, 0,-3, SB)
+	S(-3, 0,-2, SB); S(-2, 0,-2, PLC); S(-1, 0,-2, PLF); S( 0, 0,-2, PLF)
+	S( 1, 0,-2, PLF); S( 2, 0,-2, PLC); S( 3, 0,-2, SB)
+	S(-2, 0,-1, PLF); S( 0, 0,-1, TF); S( 2, 0,-1, PLF)
+	S(-3, 0, 0, TF); S(-2, 0, 0, PLF); S(-1, 0, 0, TF); S( 0, 0, 0, PC)
+	S( 1, 0, 0, TF); S( 2, 0, 0, PLF); S( 3, 0, 0, TF)
+	S(-2, 0, 1, PLF); S( 0, 0, 1, TF); S( 2, 0, 1, PLF)
+	S(-3, 0, 2, SB); S(-2, 0, 2, PLC); S(-1, 0, 2, PLF); S( 0, 0, 2, PLF)
+	S( 1, 0, 2, PLF); S( 2, 0, 2, PLC); S( 3, 0, 2, SB)
+	S(-3, 0, 3, SB); S(-2, 0, 3, SB); S( 0, 0, 3, TF); S( 2, 0, 3, SB); S( 3, 0, 3, SB)
+	-- WALL (upper) (y = 1)
+	S(-3, 1,-3, SB); S( 0, 1,-3, TF); S( 3, 1,-3, SB)
+	S( 0, 1,-2, TF); S( 0, 1,-1, TF)
+	S(-3, 1, 0, TF); S(-2, 1, 0, TF); S(-1, 1, 0, TF); S( 0, 1, 0, AIR)
+	S( 1, 1, 0, TF); S( 2, 1, 0, TF); S( 3, 1, 0, TF)
+	S( 0, 1, 1, TF); S( 0, 1, 2, TF)
+	S(-3, 1, 3, SB); S( 0, 1, 3, TF); S( 3, 1, 3, SB)
+	-- ROOF (y = 2)
+	S(-4, 2,-4, PF); S(-3, 2,-4, PF); S(-2, 2,-4, PF); S(-1, 2,-4, PF)
+	S( 0, 2,-4, PF); S( 1, 2,-4, PF); S( 2, 2,-4, PF); S( 3, 2,-4, PF); S( 4, 2,-4, PF)
+	S(-4, 2,-3, PF); S(-3, 2,-3, SB); S( 3, 2,-3, SB); S( 4, 2,-3, PF)
+	S(-4, 2,-2, PF); S( 4, 2,-2, PF)
+	S(-4, 2,-1, PF); S( 4, 2,-1, PF)
+	S(-4, 2, 0, PF); S( 0, 2, 0, AIR); S( 4, 2, 0, PF)
+	S(-4, 2, 1, PF); S( 4, 2, 1, PF)
+	S(-4, 2, 2, PF); S( 4, 2, 2, PF)
+	S(-4, 2, 3, PF); S(-3, 2, 3, SB); S( 3, 2, 3, SB); S( 4, 2, 3, PF)
+	S(-4, 2, 4, PF); S(-3, 2, 4, PF); S(-2, 2, 4, PF); S(-1, 2, 4, PF)
+	S( 0, 2, 4, PF); S( 1, 2, 4, PF); S( 2, 2, 4, PF); S( 3, 2, 4, PF); S( 4, 2, 4, PF)
 end
 
--- ---- MIDDLE LAYER y=0: the main layer with plasma ring, pole corrector ----
--- Corner steelblocks (doubled at plasma ring junction)
-S(-5, 0,-5, SB); S(-4, 0,-5, SB); S( 4, 0,-5, SB); S( 5, 0,-5, SB)
-S(-5, 0, 5, SB); S(-4, 0, 5, SB); S( 4, 0, 5, SB); S( 5, 0, 5, SB)
-S(-5, 0,-4, SB); S( 5, 0,-4, SB)
-S(-5, 0, 4, SB); S( 5, 0, 4, SB)
--- Plasma field ring (straight pieces)
-S(-4, 0,-4, PLF); S(-2, 0,-4, PLF); S(-1, 0,-4, PLF); S( 0, 0,-4, PLF)
-S( 1, 0,-4, PLF); S( 2, 0,-4, PLF); S( 3, 0,-4, PLF)
-S(-4, 0,-3, PLF); S( 4, 0,-3, PLF)
-S(-4, 0,-2, PLF); S( 4, 0,-2, PLF)
-S(-4, 0,-1, PLF); S( 4, 0,-1, PLF)
-S(-4, 0, 0, PLF); S( 4, 0, 0, PLF)
-S(-4, 0, 1, PLF); S( 4, 0, 1, PLF)
-S(-4, 0, 2, PLF); S( 4, 0, 2, PLF)
-S( 4, 0, 3, PLF)
-S(-4, 0, 4, PLF); S(-3, 0, 4, PLF); S(-2, 0, 4, PLF); S(-1, 0, 4, PLF)
-S( 0, 0, 4, PLF); S( 1, 0, 4, PLF); S( 3, 0, 4, PLF); S( 4, 0, 4, PLF)
--- Plasma field corners (4 corners of the ring)
-S(-3, 0,-4, PLC)  -- NW corner
-S( 4, 0,-4, PLC)  -- NE corner
-S(-4, 0, 3, PLC)  -- SW corner
-S( 2, 0, 4, PLC)  -- SE corner
--- Toroid walls inside the plasma ring (arm walls)
-S(-2, 0,-5, TF); S( 0, 0,-5, TF); S( 2, 0,-5, TF)
-S(-2, 0,-3, TF); S( 0, 0,-3, TF); S( 2, 0,-3, TF)
-S(-5, 0,-2, TF); S(-3, 0,-2, TF); S( 3, 0,-2, TF); S( 5, 0,-2, TF)
-S(-5, 0, 0, TF); S(-3, 0, 0, TF); S( 3, 0, 0, TF); S( 5, 0, 0, TF)
-S(-5, 0, 2, TF); S(-3, 0, 2, TF); S( 3, 0, 2, TF); S( 5, 0, 2, TF)
-S(-2, 0, 3, TF); S( 0, 0, 3, TF); S( 2, 0, 3, TF)
-S(-2, 0, 5, TF); S( 0, 0, 5, TF); S( 2, 0, 5, TF)
--- Steel block transitions at arm-to-center boundary
-S(-2, 0, 0, SB); S( 2, 0, 0, SB); S( 0, 0,-2, SB); S( 0, 0, 2, SB)
--- Center 3x3: pole field ring with pole corrector
-S(-1, 0,-1, PF); S( 0, 0,-1, PF); S( 1, 0,-1, PF)
-S(-1, 0, 0, PF); S( 0, 0, 0, PC); S( 1, 0, 0, PF)
-S(-1, 0, 1, PF); S( 0, 0, 1, PF); S( 1, 0, 1, PF)
+-- ---- Tier 2 structure: 13x13x5 (317 entries) ----
+local STRUCTURE_T2 = {}
+do
+	local function S(dx, dy, dz, node)
+		STRUCTURE_T2[#STRUCTURE_T2+1] = {x=dx, y=dy, z=dz, node=node}
+	end
+	-- FLOOR (y = -2): pole_field border, steelblock interior grid
+	for i = -6, 6 do S(i,-2,-6, PF); S(i,-2, 6, PF) end
+	for i = -5, 5 do S(-6,-2, i, PF); S( 6,-2, i, PF) end
+	S( 0,-2, 0, SB)
+	for i = -5, 5 do S(i,-2, 0, SB) end
+	for i = -5, 5 do if i ~= 0 then S(0,-2, i, SB) end end
+	for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],-2,c[2], SB) end
+	S(-1,-2,-1, SB); S( 0,-2,-1, SB); S( 1,-2,-1, SB)
+	S(-1,-2, 1, SB); S( 0,-2, 1, SB); S( 1,-2, 1, SB)
+	-- ROOF (y = +2)
+	for i = -6, 6 do S(i, 2,-6, PF); S(i, 2, 6, PF) end
+	for i = -5, 5 do S(-6, 2, i, PF); S( 6, 2, i, PF) end
+	for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1], 2,c[2], SB) end
+	S(0, 2, 0, AIR)
+	-- MIDDLE LAYERS y=-1 and y=+1 (symmetric)
+	for _, dy in ipairs({-1, 1}) do
+		for _, c in ipairs({{-5,-5},{-5,5},{5,-5},{5,5}}) do S(c[1],dy,c[2], SB) end
+		for _, dz in ipairs({-5,-4,-3, 3,4,5}) do
+			S(-2,dy,dz, TF); S(0,dy,dz, TF); S(2,dy,dz, TF)
+		end
+		S(-5,dy,-2, TF); S(-4,dy,-2, TF); S(-3,dy,-2, TF)
+		S( 3,dy,-2, TF); S( 4,dy,-2, TF); S( 5,dy,-2, TF)
+		S(-5,dy, 0, TF); S(-4,dy, 0, TF); S(-3,dy, 0, TF)
+		S( 3,dy, 0, TF); S( 4,dy, 0, TF); S( 5,dy, 0, TF)
+		S(-5,dy, 2, TF); S(-4,dy, 2, TF); S(-3,dy, 2, TF)
+		S( 3,dy, 2, TF); S( 4,dy, 2, TF); S( 5,dy, 2, TF)
+		S(-2,dy, 0, SB); S( 2,dy, 0, SB)
+		S( 0,dy,-2, SB); S( 0,dy, 2, SB)
+		S(-1,dy,-1, PF); S( 0,dy,-1, PF); S( 1,dy,-1, PF)
+		S(-1,dy, 0, PF);                   S( 1,dy, 0, PF)
+		S(-1,dy, 1, PF); S( 0,dy, 1, PF); S( 1,dy, 1, PF)
+		S(0,dy, 0, AIR)
+	end
+	-- MIDDLE LAYER y=0: plasma ring, pole corrector
+	S(-5, 0,-5, SB); S(-4, 0,-5, SB); S( 4, 0,-5, SB); S( 5, 0,-5, SB)
+	S(-5, 0, 5, SB); S(-4, 0, 5, SB); S( 4, 0, 5, SB); S( 5, 0, 5, SB)
+	S(-5, 0,-4, SB); S( 5, 0,-4, SB)
+	S(-5, 0, 4, SB); S( 5, 0, 4, SB)
+	S(-4, 0,-4, PLF); S(-2, 0,-4, PLF); S(-1, 0,-4, PLF); S( 0, 0,-4, PLF)
+	S( 1, 0,-4, PLF); S( 2, 0,-4, PLF); S( 3, 0,-4, PLF)
+	S(-4, 0,-3, PLF); S( 4, 0,-3, PLF)
+	S(-4, 0,-2, PLF); S( 4, 0,-2, PLF)
+	S(-4, 0,-1, PLF); S( 4, 0,-1, PLF)
+	S(-4, 0, 0, PLF); S( 4, 0, 0, PLF)
+	S(-4, 0, 1, PLF); S( 4, 0, 1, PLF)
+	S(-4, 0, 2, PLF); S( 4, 0, 2, PLF)
+	S( 4, 0, 3, PLF)
+	S(-4, 0, 4, PLF); S(-3, 0, 4, PLF); S(-2, 0, 4, PLF); S(-1, 0, 4, PLF)
+	S( 0, 0, 4, PLF); S( 1, 0, 4, PLF); S( 3, 0, 4, PLF); S( 4, 0, 4, PLF)
+	S(-3, 0,-4, PLC); S( 4, 0,-4, PLC); S(-4, 0, 3, PLC); S( 2, 0, 4, PLC)
+	S(-2, 0,-5, TF); S( 0, 0,-5, TF); S( 2, 0,-5, TF)
+	S(-2, 0,-3, TF); S( 0, 0,-3, TF); S( 2, 0,-3, TF)
+	S(-5, 0,-2, TF); S(-3, 0,-2, TF); S( 3, 0,-2, TF); S( 5, 0,-2, TF)
+	S(-5, 0, 0, TF); S(-3, 0, 0, TF); S( 3, 0, 0, TF); S( 5, 0, 0, TF)
+	S(-5, 0, 2, TF); S(-3, 0, 2, TF); S( 3, 0, 2, TF); S( 5, 0, 2, TF)
+	S(-2, 0, 3, TF); S( 0, 0, 3, TF); S( 2, 0, 3, TF)
+	S(-2, 0, 5, TF); S( 0, 0, 5, TF); S( 2, 0, 5, TF)
+	S(-2, 0, 0, SB); S( 2, 0, 0, SB); S( 0, 0,-2, SB); S( 0, 0, 2, SB)
+	S(-1, 0,-1, PF); S( 0, 0,-1, PF); S( 1, 0,-1, PF)
+	S(-1, 0, 0, PF); S( 0, 0, 0, PC); S( 1, 0, 0, PF)
+	S(-1, 0, 1, PF); S( 0, 0, 1, PF); S( 1, 0, 1, PF)
+end
+
+-- ---- Tier 3 structure: 17x17x5 (541 entries) ----
+local STRUCTURE_T3 = {}
+do
+	local function S(dx, dy, dz, node)
+		STRUCTURE_T3[#STRUCTURE_T3+1] = {x=dx, y=dy, z=dz, node=node}
+	end
+	-- FLOOR (y = -2)
+	for i = -8, 8 do S(i,-2,-8, PF); S(i,-2, 8, PF) end
+	for i = -7, 7 do S(-8,-2, i, PF); S( 8,-2, i, PF) end
+	-- Inner steelblock border (y=-2, z=-7 and z=7 rows)
+	for i = -7, 7 do S(i,-2,-7, SB); S(i,-2, 7, SB) end
+	for i = -6, 6 do S(-7,-2, i, SB); S( 7,-2, i, SB) end
+	-- Steelblock spines
+	for i = -6, 6 do S(i,-2, 0, SB) end
+	for i = -6, 6 do if i ~= 0 then S(0,-2, i, SB) end end
+	S( 0,-2, 0, SB)
+	-- 3x3 center ring
+	S(-1,-2,-1, SB); S( 0,-2,-1, SB); S( 1,-2,-1, SB)
+	S(-1,-2, 1, SB); S( 0,-2, 1, SB); S( 1,-2, 1, SB)
+	-- WALL layers y=-1 and y=+1 (symmetric)
+	for _, dy in ipairs({-1, 1}) do
+		S(-7,dy,-7, SB); S(-6,dy,-7, SB); S( 6,dy,-7, SB); S( 7,dy,-7, SB)
+		S(-7,dy,-6, SB); S( 7,dy,-6, SB)
+		S(-7,dy, 6, SB); S( 7,dy, 6, SB)
+		S(-7,dy, 7, SB); S(-6,dy, 7, SB); S( 6,dy, 7, SB); S( 7,dy, 7, SB)
+		-- Toroid walls: N/S arms (5 columns: x=-4,-2,0,+2,+4)
+		for _, dz in ipairs({-7,-6,-5, 5,6,7}) do
+			S(-4,dy,dz, TF); S(-2,dy,dz, TF); S(0,dy,dz, TF)
+			S( 2,dy,dz, TF); S( 4,dy,dz, TF)
+		end
+		-- E/W arms
+		S(-7,dy,-4, TF); S(-6,dy,-4, TF); S(-5,dy,-4, TF)
+		S( 5,dy,-4, TF); S( 6,dy,-4, TF); S( 7,dy,-4, TF)
+		S(-7,dy,-2, TF); S(-6,dy,-2, TF); S(-5,dy,-2, TF)
+		S( 5,dy,-2, TF); S( 6,dy,-2, TF); S( 7,dy,-2, TF)
+		S(-7,dy, 0, TF); S(-6,dy, 0, TF); S(-5,dy, 0, TF)
+		S( 5,dy, 0, TF); S( 6,dy, 0, TF); S( 7,dy, 0, TF)
+		S(-7,dy, 2, TF); S(-6,dy, 2, TF); S(-5,dy, 2, TF)
+		S( 5,dy, 2, TF); S( 6,dy, 2, TF); S( 7,dy, 2, TF)
+		S(-7,dy, 4, TF); S(-6,dy, 4, TF); S(-5,dy, 4, TF)
+		S( 5,dy, 4, TF); S( 6,dy, 4, TF); S( 7,dy, 4, TF)
+		-- Steel block transitions
+		S(-4,dy, 0, SB); S(-3,dy, 0, SB); S(-2,dy, 0, SB)
+		S( 2,dy, 0, SB); S( 3,dy, 0, SB); S( 4,dy, 0, SB)
+		S( 0,dy,-4, SB); S( 0,dy,-3, SB); S( 0,dy,-2, SB)
+		S( 0,dy, 2, SB); S( 0,dy, 3, SB); S( 0,dy, 4, SB)
+		-- Center 3x3: pole field ring with air
+		S(-1,dy,-1, PF); S( 0,dy,-1, PF); S( 1,dy,-1, PF)
+		S(-1,dy, 0, PF);                   S( 1,dy, 0, PF)
+		S(-1,dy, 1, PF); S( 0,dy, 1, PF); S( 1,dy, 1, PF)
+		S(0,dy, 0, AIR)
+	end
+	-- MIDDLE LAYER y=0: plasma ring, pole corrector
+	S(-7, 0,-7, SB); S(-6, 0,-7, SB); S( 6, 0,-7, SB); S( 7, 0,-7, SB)
+	S(-7, 0,-6, SB); S( 7, 0,-6, SB)
+	S(-7, 0, 6, SB); S( 7, 0, 6, SB)
+	S(-7, 0, 7, SB); S(-6, 0, 7, SB); S( 6, 0, 7, SB); S( 7, 0, 7, SB)
+	-- Plasma field ring
+	S(-6, 0,-6, PLC)
+	S(-5, 0,-6, PLF); S(-4, 0,-6, PLF); S(-3, 0,-6, PLF); S(-2, 0,-6, PLF)
+	S(-1, 0,-6, PLF); S( 0, 0,-6, PLF); S( 1, 0,-6, PLF); S( 2, 0,-6, PLF)
+	S( 3, 0,-6, PLF); S( 4, 0,-6, PLF); S( 5, 0,-6, PLF)
+	S( 6, 0,-6, PLC)
+	S(-6, 0,-5, PLF); S( 6, 0,-5, PLF)
+	S(-6, 0,-4, PLF); S( 6, 0,-4, PLF)
+	S(-6, 0,-3, PLF); S( 6, 0,-3, PLF)
+	S(-6, 0,-2, PLF); S( 6, 0,-2, PLF)
+	S(-6, 0,-1, PLF); S( 6, 0,-1, PLF)
+	S(-6, 0, 0, PLF); S( 6, 0, 0, PLF)
+	S(-6, 0, 1, PLF); S( 6, 0, 1, PLF)
+	S(-6, 0, 2, PLF); S( 6, 0, 2, PLF)
+	S(-6, 0, 3, PLF); S( 6, 0, 3, PLF)
+	S(-6, 0, 4, PLF); S( 6, 0, 4, PLF)
+	S(-6, 0, 5, PLF); S( 6, 0, 5, PLF)
+	S(-6, 0, 6, PLC)
+	S(-5, 0, 6, PLF); S(-4, 0, 6, PLF); S(-3, 0, 6, PLF); S(-2, 0, 6, PLF)
+	S(-1, 0, 6, PLF); S( 0, 0, 6, PLF); S( 1, 0, 6, PLF); S( 2, 0, 6, PLF)
+	S( 3, 0, 6, PLF); S( 4, 0, 6, PLF); S( 5, 0, 6, PLF)
+	S( 6, 0, 6, PLC)
+	-- Toroid walls inside plasma ring
+	S(-4, 0,-7, TF); S(-2, 0,-7, TF); S( 0, 0,-7, TF); S( 2, 0,-7, TF); S( 4, 0,-7, TF)
+	S(-4, 0,-5, TF); S(-2, 0,-5, TF); S( 0, 0,-5, TF); S( 2, 0,-5, TF); S( 4, 0,-5, TF)
+	S(-7, 0,-4, TF); S(-5, 0,-4, TF); S( 5, 0,-4, TF); S( 7, 0,-4, TF)
+	S(-7, 0,-2, TF); S(-5, 0,-2, TF); S( 5, 0,-2, TF); S( 7, 0,-2, TF)
+	S(-7, 0, 0, TF); S(-5, 0, 0, TF); S( 5, 0, 0, TF); S( 7, 0, 0, TF)
+	S(-7, 0, 2, TF); S(-5, 0, 2, TF); S( 5, 0, 2, TF); S( 7, 0, 2, TF)
+	S(-7, 0, 4, TF); S(-5, 0, 4, TF); S( 5, 0, 4, TF); S( 7, 0, 4, TF)
+	S(-4, 0, 5, TF); S(-2, 0, 5, TF); S( 0, 0, 5, TF); S( 2, 0, 5, TF); S( 4, 0, 5, TF)
+	S(-4, 0, 7, TF); S(-2, 0, 7, TF); S( 0, 0, 7, TF); S( 2, 0, 7, TF); S( 4, 0, 7, TF)
+	-- Steel block transitions
+	S(-4, 0, 0, SB); S(-3, 0, 0, SB); S(-2, 0, 0, SB)
+	S( 2, 0, 0, SB); S( 3, 0, 0, SB); S( 4, 0, 0, SB)
+	S( 0, 0,-4, SB); S( 0, 0,-3, SB); S( 0, 0,-2, SB)
+	S( 0, 0, 2, SB); S( 0, 0, 3, SB); S( 0, 0, 4, SB)
+	-- Center 3x3: pole field ring with pole corrector
+	S(-1, 0,-1, PF); S( 0, 0,-1, PF); S( 1, 0,-1, PF)
+	S(-1, 0, 0, PF); S( 0, 0, 0, PC); S( 1, 0, 0, PF)
+	S(-1, 0, 1, PF); S( 0, 0, 1, PF); S( 1, 0, 1, PF)
+	-- ROOF (y = 2)
+	for i = -8, 8 do S(i, 2,-8, PF); S(i, 2, 8, PF) end
+	for i = -7, 7 do S(-8, 2, i, PF); S( 8, 2, i, PF) end
+	-- Inner steelblock border on roof
+	S(-7, 2,-7, SB); S(-6, 2,-7, SB); S(-5, 2,-7, SB)
+	S( 5, 2,-7, SB); S( 6, 2,-7, SB); S( 7, 2,-7, SB)
+	S(-7, 2,-6, SB); S( 7, 2,-6, SB)
+	S(-7, 2,-5, SB); S( 7, 2,-5, SB)
+	S(-7, 2, 5, SB); S( 7, 2, 5, SB)
+	S(-7, 2, 6, SB); S( 7, 2, 6, SB)
+	S(-7, 2, 7, SB); S(-6, 2, 7, SB); S(-5, 2, 7, SB)
+	S( 5, 2, 7, SB); S( 6, 2, 7, SB); S( 7, 2, 7, SB)
+	S( 0, 2, 0, AIR)
+end
+
+-- ============================================================
+-- TIER DEFINITIONS
+-- ============================================================
+
+local TIERS = {
+	{
+		name = "Tier 1",
+		power_output = 140000,
+		jumpstart_energy = 45000,
+		fuel_slots = 3,
+		fuel_duration = 8 * 60 * 60,
+		charge_time = 5,
+		structure = STRUCTURE_T1,
+	},
+	{
+		name = "Tier 2",
+		power_output = 240000,
+		jumpstart_energy = 85000,
+		fuel_slots = 6,
+		fuel_duration = 8 * 60 * 60,
+		charge_time = 5,
+		structure = STRUCTURE_T2,
+	},
+	{
+		name = "Tier 3",
+		power_output = 550000,
+		jumpstart_energy = 200000,
+		fuel_slots = 12,
+		fuel_duration = 8 * 60 * 60,
+		charge_time = 5,
+		structure = STRUCTURE_T3,
+	},
+}
+
+--- Helper: get tier table from metadata, returns tier table or nil
+local function get_tier(pos)
+	local meta = minetest.get_meta(pos)
+	local idx = meta:get_int("reactor_tier")
+	return TIERS[idx], idx
+end
 
 -- ============================================================
 -- STRUCTURE VALIDATION
@@ -164,7 +346,7 @@ S(-1, 0, 1, PF); S( 0, 0, 1, PF); S( 1, 0, 1, PF)
 
 --- Find the pole corrector near a given position.
 local function find_pole_corrector(pos)
-	local range = 8
+	local range = 10 -- large enough for tier 3 (17x17)
 	for dx = -range, range do
 		for dy = -range, range do
 			for dz = -range, range do
@@ -180,7 +362,12 @@ end
 
 --- Validate the reactor structure.
 -- Returns true on success, or false + list of error strings.
-function lazarus_space.validate_reactor_structure(panel_pos)
+function lazarus_space.validate_reactor_structure(panel_pos, tier_index)
+	local tier = TIERS[tier_index]
+	if not tier then
+		return false, {"Invalid reactor tier."}
+	end
+
 	local center = find_pole_corrector(panel_pos)
 	if not center then
 		return false, {"No pole corrector detected nearby."}
@@ -189,7 +376,7 @@ function lazarus_space.validate_reactor_structure(panel_pos)
 	local errors = {}
 
 	-- Check each defined structure position
-	for _, entry in ipairs(STRUCTURE) do
+	for _, entry in ipairs(tier.structure) do
 		local wp = {
 			x = center.x + entry.x,
 			y = center.y + entry.y,
@@ -292,15 +479,42 @@ local function gradient_bar(fs, x, y, w, h, fill_pct)
 	return fs
 end
 
-local function build_unchecked_formspec()
-	local fs = "size[9,4]"
+local function build_tier_select_formspec()
+	local fs = "size[9,5.5]"
+		.. "bgcolor[#080808;true]"
+		.. "box[0,0;8.8,0.8;#1a1a2e]"
+		.. "label[2.2,0.2;Magnetic Fusion Reactor — Select Tier]"
+	for i, tier in ipairs(TIERS) do
+		local y = 0.8 + (i - 1) * 1.4
+		fs = fs .. "box[0," .. y .. ";8.8,1.2;#0d0d1a]"
+		fs = fs .. "label[0.3," .. string.format("%.1f", y + 0.15) .. ";"
+			.. minetest.colorize("#00ccaa", tier.name) .. "]"
+		fs = fs .. "label[0.3," .. string.format("%.1f", y + 0.55) .. ";"
+			.. tier.power_output .. " EU  |  "
+			.. tier.fuel_slots .. " rods  |  "
+			.. tier.jumpstart_energy .. " EU jumpstart]"
+		fs = styled_btn(fs, 7.0, y + 0.2, 1.6, 0.7, "select_tier_" .. i, "Select",
+			"#00ccaa", "#00ddbb", "#009988")
+	end
+	return fs
+end
+
+local function build_unchecked_formspec(tier_index)
+	local fs = "size[9,4.5]"
 		.. "bgcolor[#080808;true]"
 		.. "box[0,0;8.8,0.8;#1a1a2e]"
 		.. "label[3.4,0.2;Magnetic Fusion Reactor]"
 		.. "box[0,1;8.8,0.6;#0a0a15]"
-		.. "label[3.4,1.1;Structure Check Required]"
+	if tier_index and TIERS[tier_index] then
+		fs = fs .. "label[3.0,1.1;" .. TIERS[tier_index].name
+			.. " — Structure Check Required]"
+	else
+		fs = fs .. "label[3.4,1.1;Structure Check Required]"
+	end
 	fs = styled_btn(fs, 2.5, 2.2, 4, 0.7, "check_structure", "Check Structure",
 		"#00ccaa", "#00ddbb", "#009988")
+	fs = styled_btn(fs, 2.5, 3.2, 4, 0.7, "change_tier", "Change Tier",
+		"#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 	return fs
 end
 
@@ -327,6 +541,8 @@ end
 
 local function build_reactor_formspec(pos)
 	local meta = minetest.get_meta(pos)
+	local tier, tier_index = get_tier(pos)
+	if not tier then return build_tier_select_formspec() end
 	local state = meta:get_string("reactor_state")
 	if state == "" then state = "standby" end
 	local fuel_time = meta:get_int("fuel_time")
@@ -334,7 +550,7 @@ local function build_reactor_formspec(pos)
 	local inv = meta:get_inventory()
 	local fuel_count = 0
 	local filled_slots = 0
-	for i = 1, FUEL_SLOTS do
+	for i = 1, tier.fuel_slots do
 		local stack = inv:get_stack("fuel", i)
 		if stack:get_name() == FUEL_ITEM and stack:get_count() > 0 then
 			fuel_count = fuel_count + stack:get_count()
@@ -348,7 +564,7 @@ local function build_reactor_formspec(pos)
 	if js_pos then
 		local js_meta = minetest.get_meta(js_pos)
 		local stored = js_meta:get_int("stored_energy")
-		if stored >= JUMPSTART_ENERGY then
+		if stored >= tier.jumpstart_energy then
 			hv_ready = true
 		end
 	end
@@ -373,7 +589,7 @@ local function build_reactor_formspec(pos)
 	local js_progress = 0
 	if state == "jump_starting" then
 		local js_elapsed = meta:get_float("js_elapsed")
-		js_progress = math.min(100, math.floor(js_elapsed / CHARGE_TIME * 100))
+		js_progress = math.min(100, math.floor(js_elapsed / tier.charge_time * 100))
 	elseif state == "jump_started" or state == "active" then
 		js_progress = 100
 	end
@@ -391,10 +607,16 @@ local function build_reactor_formspec(pos)
 	fs = gradient_bar(fs, 0.5, 1.8, 7.8, 0.5, js_progress)
 	fs = fs .. "label[8.5,1.9;" .. js_progress .. "%]"
 
-	-- Fuel section
+	-- Fuel section (variable layout per tier)
 	fs = fs .. "box[0,2.5;8.8,1.8;#0d0d1a]"
-		.. "label[0.3,2.6;Fuel Rods (" .. fuel_count .. "/" .. FUEL_SLOTS .. ")]"
-		.. "list[context;fuel;1.5,3;6,1;]"
+		.. "label[0.3,2.6;Fuel Rods (" .. fuel_count .. "/" .. tier.fuel_slots .. ")]"
+	if tier.fuel_slots <= 3 then
+		fs = fs .. "list[context;fuel;2.5,3;3,1;]"
+	elseif tier.fuel_slots <= 6 then
+		fs = fs .. "list[context;fuel;1.5,3;6,1;]"
+	else
+		fs = fs .. "list[context;fuel;0.5,3;6,2;]"
+	end
 
 	-- Power section
 	fs = fs .. "box[0,4.5;8.8,1.2;#0d0d1a]"
@@ -414,10 +636,10 @@ local function build_reactor_formspec(pos)
 			if t ~= "" then output_tier = t end
 		end
 		fs = fs .. "label[0.3,5.1;Output: " .. minetest.colorize("#00ccaa",
-			POWER_OUTPUT .. " EU") .. " (" .. output_tier .. ")]"
+			tier.power_output .. " EU") .. " (" .. output_tier .. ")]"
 		-- Fuel remaining with gradient drain bar
 		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. format_time(fuel_time) .. "]"
-		local fuel_pct = math.floor(fuel_time / FUEL_DURATION * 100)
+		local fuel_pct = math.floor(fuel_time / tier.fuel_duration * 100)
 		fs = gradient_bar(fs, 0.5, 6.3, 7.8, 0.4, fuel_pct)
 	end
 
@@ -432,7 +654,7 @@ local function build_reactor_formspec(pos)
 		end
 	elseif state == "jump_starting" then
 		local js_elapsed = meta:get_float("js_elapsed")
-		local js_remaining = math.max(0, CHARGE_TIME - js_elapsed)
+		local js_remaining = math.max(0, tier.charge_time - js_elapsed)
 		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
 			"Jump Starting... " .. string.format("%.1fs", js_remaining)) .. "]"
 	elseif state == "jump_started" then
@@ -441,12 +663,12 @@ local function build_reactor_formspec(pos)
 			-- Resume with stored fuel time — no rods needed
 			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "resume", "Resume Reactor",
 				"#00cc66", "#00dd77", "#009955")
-		elseif filled_slots >= FUEL_SLOTS then
+		elseif filled_slots >= tier.fuel_slots then
 			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start",
 				"#00cc66", "#00dd77", "#009955")
 		else
 			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject_disabled",
-				"Need 1 rod in each of " .. FUEL_SLOTS .. " slots",
+				"Need 1 rod in each of " .. tier.fuel_slots .. " slots",
 				"#333333", "#333333", "#333333", "#666666")
 		end
 	elseif state == "active" then
@@ -470,15 +692,42 @@ end
 local function panel_on_receive_fields(pos, formname, fields, sender)
 	local meta = minetest.get_meta(pos)
 
+	-- Tier selection
+	for i = 1, #TIERS do
+		if fields["select_tier_" .. i] then
+			meta:set_int("reactor_tier", i)
+			local inv = meta:get_inventory()
+			inv:set_size("fuel", TIERS[i].fuel_slots)
+			meta:set_string("formspec", build_unchecked_formspec(i))
+			return
+		end
+	end
+
+	if fields.change_tier then
+		-- Only allow tier change before validation/running
+		local state = meta:get_string("reactor_state")
+		if state == "" or state == "standby" then
+			meta:set_int("reactor_tier", 0)
+			meta:set_string("reactor_state", "")
+			meta:set_string("validated", "")
+			meta:set_string("formspec", build_tier_select_formspec())
+		end
+		return
+	end
+
 	if fields.check_structure then
-		local ok, result = lazarus_space.validate_reactor_structure(pos)
+		local tier_index = meta:get_int("reactor_tier")
+		if tier_index == 0 then
+			meta:set_string("formspec", build_tier_select_formspec())
+			return
+		end
+		local ok, result = lazarus_space.validate_reactor_structure(pos, tier_index)
 		if ok then
 			meta:set_string("reactor_state", "standby")
 			meta:set_string("validated", "true")
 			meta:set_string("center_x", tostring(result.x))
 			meta:set_string("center_y", tostring(result.y))
 			meta:set_string("center_z", tostring(result.z))
-			-- Start integrity check timer
 			local timer = minetest.get_node_timer(pos)
 			timer:start(1)
 			meta:set_string("formspec", build_reactor_formspec(pos))
@@ -489,24 +738,22 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 	end
 
 	if fields.jump_start then
+		local tier = get_tier(pos)
+		if not tier then return end
 		local state = meta:get_string("reactor_state")
 		if state ~= "standby" then return end
 
-		-- Verify HV power (fuel not required for jump start)
 		local js_pos = find_neighbor(pos, "lazarus_space:plasma_jumpstarter")
 		if not js_pos then return end
 		local js_meta = minetest.get_meta(js_pos)
-		if js_meta:get_int("stored_energy") < JUMPSTART_ENERGY then return end
+		if js_meta:get_int("stored_energy") < tier.jumpstart_energy then return end
 
-		-- Start jump start sequence
 		meta:set_string("reactor_state", "jump_starting")
 		meta:set_float("js_elapsed", 0)
 
-		-- Drain jumpstarter energy
 		local stored = js_meta:get_int("stored_energy")
-		js_meta:set_int("stored_energy", math.max(0, stored - JUMPSTART_ENERGY))
+		js_meta:set_int("stored_energy", math.max(0, stored - tier.jumpstart_energy))
 
-		-- Fast timer for smooth progress bar (0.1s ticks)
 		local timer = minetest.get_node_timer(pos)
 		timer:start(0.1)
 		meta:set_string("formspec", build_reactor_formspec(pos))
@@ -514,41 +761,38 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 	end
 
 	if fields.inject then
+		local tier = get_tier(pos)
+		if not tier then return end
 		local state = meta:get_string("reactor_state")
 		if state ~= "jump_started" then return end
 
-		-- Verify each slot has at least 1 fuel rod
 		local inv = meta:get_inventory()
-		for i = 1, FUEL_SLOTS do
+		for i = 1, tier.fuel_slots do
 			local stack = inv:get_stack("fuel", i)
 			if stack:get_name() ~= FUEL_ITEM or stack:get_count() < 1 then
-				return -- every slot must have at least 1 rod
+				return
 			end
 		end
 
-		-- Consume exactly 1 fuel rod from each slot
-		for i = 1, FUEL_SLOTS do
+		for i = 1, tier.fuel_slots do
 			local stack = inv:get_stack("fuel", i)
 			stack:take_item(1)
 			inv:set_stack("fuel", i, stack)
 		end
 
-		-- Activate reactor
 		meta:set_string("reactor_state", "active")
-		meta:set_int("fuel_time", FUEL_DURATION)
+		meta:set_int("fuel_time", tier.fuel_duration)
 		meta:set_int("display_accumulator", 0)
-		-- Reset timer to 1s ticks (was 0.1s during jump start)
 		local timer = minetest.get_node_timer(pos)
 		timer:start(1)
 
-		-- Notify power output — update infotext immediately
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
 		if po_pos then
 			local po_meta = minetest.get_meta(po_pos)
-			local tier = po_meta:get_string("output_tier")
-			if tier == "" then tier = "HV" end
+			local otier = po_meta:get_string("output_tier")
+			if otier == "" then otier = "HV" end
 			po_meta:set_string("infotext", "Fusion Power Output - "
-				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+				.. tier.power_output .. " EU (" .. otier .. ")")
 		end
 
 		meta:set_string("formspec", build_reactor_formspec(pos))
@@ -556,28 +800,27 @@ local function panel_on_receive_fields(pos, formname, fields, sender)
 	end
 
 	if fields.resume then
+		local tier = get_tier(pos)
+		if not tier then return end
 		local state = meta:get_string("reactor_state")
 		if state ~= "jump_started" then return end
 		local remaining = meta:get_int("remaining_fuel_time")
 		if remaining <= 0 then return end
 
-		-- Resume reactor with stored fuel time
 		meta:set_string("reactor_state", "active")
 		meta:set_int("fuel_time", remaining)
 		meta:set_int("remaining_fuel_time", 0)
 		meta:set_int("display_accumulator", 0)
-		-- Reset timer to 1s ticks (was 0.1s during jump start)
 		local timer = minetest.get_node_timer(pos)
 		timer:start(1)
 
-		-- Notify power output
 		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
 		if po_pos then
 			local po_meta = minetest.get_meta(po_pos)
-			local tier = po_meta:get_string("output_tier")
-			if tier == "" then tier = "HV" end
+			local otier = po_meta:get_string("output_tier")
+			if otier == "" then otier = "HV" end
 			po_meta:set_string("infotext", "Fusion Power Output - "
-				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+				.. tier.power_output .. " EU (" .. otier .. ")")
 		end
 
 		meta:set_string("formspec", build_reactor_formspec(pos))
@@ -617,48 +860,46 @@ end
 
 local function panel_on_timer(pos, elapsed)
 	local meta = minetest.get_meta(pos)
+	local tier, tier_index = get_tier(pos)
 	local state = meta:get_string("reactor_state")
 
 	-- Periodic structure integrity check
-	if meta:get_string("validated") == "true" then
+	if meta:get_string("validated") == "true" and tier then
 		local check_acc = meta:get_float("check_accumulator") + elapsed
 		if check_acc >= STRUCTURE_CHECK_INTERVAL then
 			check_acc = 0
-			local ok = lazarus_space.validate_reactor_structure(pos)
+			local ok = lazarus_space.validate_reactor_structure(pos, tier_index)
 			if not ok then
-				-- Structure broken — invalidate
 				meta:set_string("validated", "")
 				meta:set_string("reactor_state", "")
 				meta:set_float("js_elapsed", 0)
 
-				-- Shut down power output — update infotext
 				local po_pos = find_neighbor(pos,
 					"lazarus_space:fusion_power_output")
 				if po_pos then
 					local po_meta = minetest.get_meta(po_pos)
 					po_meta:set_string("infotext", "Fusion Power Output - Offline")
 				end
-				meta:set_string("formspec", build_unchecked_formspec())
-				return false -- stop timer
+				meta:set_string("formspec", build_unchecked_formspec(tier_index))
+				return false
 			end
 		end
 		meta:set_float("check_accumulator", check_acc)
 	end
 
 	-- Jump start countdown — 0.1s ticks for smooth progress bar
-	if state == "jump_starting" then
+	if state == "jump_starting" and tier then
 		local js_elapsed = meta:get_float("js_elapsed") + elapsed
 		meta:set_float("js_elapsed", js_elapsed)
 
-		if js_elapsed >= CHARGE_TIME then
+		if js_elapsed >= tier.charge_time then
 			meta:set_string("reactor_state", "jump_started")
 			meta:set_float("js_elapsed", 0)
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Start Complete")
-			-- Switch back to 1s timer for normal operation
 			local timer = minetest.get_node_timer(pos)
 			timer:start(1)
 		else
-			local remaining = CHARGE_TIME - js_elapsed
+			local remaining = tier.charge_time - js_elapsed
 			meta:set_string("infotext", "Magnetic Fusion Reactor — Jump Starting... "
 				.. string.format("%.1fs", remaining))
 		end
@@ -936,11 +1177,12 @@ minetest.register_node("lazarus_space:fusion_control_panel", {
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		inv:set_size("fuel", FUEL_SLOTS)
+		inv:set_size("fuel", 6) -- default size, resized on tier select
+		meta:set_int("reactor_tier", 0)
 		meta:set_string("reactor_state", "")
 		meta:set_string("validated", "")
-		meta:set_string("infotext", "Magnetic Fusion Reactor — Not Validated")
-		meta:set_string("formspec", build_unchecked_formspec())
+		meta:set_string("infotext", "Magnetic Fusion Reactor — Select Tier")
+		meta:set_string("formspec", build_tier_select_formspec())
 	end,
 
 	after_place_node = function(pos, placer)
@@ -1010,7 +1252,7 @@ minetest.register_node("lazarus_space:plasma_jumpstarter", {
 		meta:set_int("HV_EU_demand", 0)
 		meta:set_int("HV_EU_input", 0)
 		meta:set_int("stored_energy", 0)
-		meta:set_string("infotext", "Plasma Jumpstarter — 0 / " .. JUMPSTART_ENERGY .. " EU")
+		meta:set_string("infotext", "Plasma Jumpstarter — 0 EU (no tier selected)")
 	end,
 
 	after_place_node = function(pos, placer)
@@ -1030,19 +1272,26 @@ minetest.register_node("lazarus_space:plasma_jumpstarter", {
 		local meta = minetest.get_meta(pos)
 		local stored = meta:get_int("stored_energy")
 
-		if stored < JUMPSTART_ENERGY then
-			-- Demand power to charge up
+		-- Get tier from neighboring control panel
+		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
+		local max_energy = 85000 -- default
+		if panel_pos then
+			local tier = get_tier(panel_pos)
+			if tier then max_energy = tier.jumpstart_energy end
+		end
+
+		if stored < max_energy then
 			meta:set_int("HV_EU_demand", 10000)
 			local input = meta:get_int("HV_EU_input")
-			stored = math.min(JUMPSTART_ENERGY, stored + input)
+			stored = math.min(max_energy, stored + input)
 			meta:set_int("stored_energy", stored)
 		else
 			meta:set_int("HV_EU_demand", 0)
 		end
 
-		local ready = stored >= JUMPSTART_ENERGY
+		local ready = stored >= max_energy
 		meta:set_string("infotext", "Plasma Jumpstarter — "
-			.. stored .. " / " .. JUMPSTART_ENERGY .. " EU"
+			.. stored .. " / " .. max_energy .. " EU"
 			.. (ready and " (Ready)" or ""))
 	end,
 
@@ -1095,35 +1344,34 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 	on_rightclick = function(pos, node, clicker)
 		local meta = minetest.get_meta(pos)
-		local tier = meta:get_string("output_tier")
-		if tier == "" then tier = "HV" end
+		local otier = meta:get_string("output_tier")
+		if otier == "" then otier = "HV" end
 
-		-- Check reactor state from neighboring control panel
+		-- Get reactor tier from neighboring control panel
 		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
 		local active = false
+		local power = 0
 		if panel_pos then
 			local panel_meta = minetest.get_meta(panel_pos)
 			active = panel_meta:get_string("reactor_state") == "active"
+			local rtier = get_tier(panel_pos)
+			if rtier then power = rtier.power_output end
 		end
 
-		-- Build polished formspec
 		local fs = "size[6,4.5]"
 			.. "bgcolor[#080808;true]"
-			-- Header
 			.. "box[0,0;5.8,0.8;#1a1a2e]"
 			.. "label[1.5,0.2;Fusion Power Output]"
-			-- Status
 			.. "box[0,1;5.8,0.6;#0a0a15]"
 
 		if active then
 			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#00ff66", "ONLINE")
-				.. "  " .. POWER_OUTPUT .. " EU]"
+				.. "  " .. power .. " EU]"
 		else
 			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "OFFLINE")
 				.. "  0 EU]"
 		end
 
-		-- Tier selection
 		fs = fs .. "box[0,1.8;5.8,1.5;#0d0d1a]"
 			.. "label[0.3,1.9;Output Tier]"
 
@@ -1131,7 +1379,7 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 		for _, t in ipairs(tiers) do
 			local tname, tx = t[1], t[2]
 			local btn_name = "set_" .. tname:lower()
-			if tier == tname then
+			if otier == tname then
 				fs = styled_btn(fs, tx, 2.4, 1.5, 0.7, btn_name, tname,
 					"#00ccaa", "#00ddbb", "#009988")
 			else
@@ -1140,11 +1388,10 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 			end
 		end
 
-		-- Output info
 		fs = fs .. "box[0,3.5;5.8,0.8;#0d0d1a]"
 		if active then
 			fs = fs .. "label[0.3,3.7;Supplying: " .. minetest.colorize("#00ccaa",
-				POWER_OUTPUT .. " EU") .. " on " .. tier .. "]"
+				power .. " EU") .. " on " .. otier .. "]"
 		else
 			fs = fs .. "label[0.3,3.7;" .. minetest.colorize("#666666",
 				"No output - Reactor offline") .. "]"
@@ -1156,23 +1403,26 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 
 	technic_run = function(pos, node)
 		local meta = minetest.get_meta(pos)
-		local tier = meta:get_string("output_tier")
-		if tier == "" then tier = "HV" end
+		local otier = meta:get_string("output_tier")
+		if otier == "" then otier = "HV" end
 
-		-- Check reactor state from neighboring control panel
+		-- Get reactor tier from neighboring control panel
 		local panel_pos = find_neighbor(pos, "lazarus_space:fusion_control_panel")
 		local active = false
+		local power = 0
 		if panel_pos then
 			local panel_meta = minetest.get_meta(panel_pos)
 			active = panel_meta:get_string("reactor_state") == "active"
+			local rtier = get_tier(panel_pos)
+			if rtier then power = rtier.power_output end
 		end
 
 		if active then
-			meta:set_int("HV_EU_supply", tier == "HV" and POWER_OUTPUT or 0)
-			meta:set_int("MV_EU_supply", tier == "MV" and POWER_OUTPUT or 0)
-			meta:set_int("LV_EU_supply", tier == "LV" and POWER_OUTPUT or 0)
+			meta:set_int("HV_EU_supply", otier == "HV" and power or 0)
+			meta:set_int("MV_EU_supply", otier == "MV" and power or 0)
+			meta:set_int("LV_EU_supply", otier == "LV" and power or 0)
 			meta:set_string("infotext", "Fusion Power Output - "
-				.. POWER_OUTPUT .. " EU (" .. tier .. ")")
+				.. power .. " EU (" .. otier .. ")")
 		else
 			meta:set_int("HV_EU_supply", 0)
 			meta:set_int("MV_EU_supply", 0)

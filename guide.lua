@@ -1,5 +1,7 @@
 -- Lazarus Space: Magnetic Fusion Reactor Build Guide
--- 8-page craftable guide book with interactive 3D model viewers.
+-- 18-page craftable guide book with interactive 3D model viewers.
+-- Pages 1: Intro (tier comparison), 2-6: Tier 1, 7-11: Tier 2,
+-- 12-16: Tier 3, 17: Control blocks, 18: Startup procedure.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -25,7 +27,7 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- GRID RENDERING (for page 7 control block diagram only)
+-- GRID RENDERING (for page 17 control block diagram only)
 -- ============================================================
 
 local GRID_COLORS = {
@@ -102,11 +104,46 @@ end
 -- so formspec parsing doesn't split on the coordinate commas.
 
 local PAGE_MODELS = {
-	[2] = "reactor_layer_floor.obj",
-	[3] = "reactor_layer_walls.obj",
-	[4] = "reactor_layer_middle.obj",
-	[5] = "reactor_layer_roof.obj",
-	[6] = "reactor_complete.obj",
+	-- Tier 1
+	[2] = "reactor_t1_floor.obj",
+	[3] = "reactor_t1_walls.obj",
+	[4] = "reactor_t1_middle.obj",
+	[5] = "reactor_t1_roof.obj",
+	[6] = "reactor_t1_complete.obj",
+	-- Tier 2
+	[7] = "reactor_t2_floor.obj",
+	[8] = "reactor_t2_walls.obj",
+	[9] = "reactor_t2_middle.obj",
+	[10] = "reactor_t2_roof.obj",
+	[11] = "reactor_t2_complete.obj",
+	-- Tier 3
+	[12] = "reactor_t3_floor.obj",
+	[13] = "reactor_t3_walls.obj",
+	[14] = "reactor_t3_middle.obj",
+	[15] = "reactor_t3_roof.obj",
+	[16] = "reactor_t3_complete.obj",
+}
+
+-- ============================================================
+-- TIER INFO (for page content generation)
+-- ============================================================
+
+local TIER_INFO = {
+	{
+		name = "Tier 1", size = "9x9x5",
+		power = "140,000", rods = 3, jumpstart = "45,000",
+		blocks = {pf = 64, tf = 32, sb = 41, plf = 12, pc = 1},
+	},
+	{
+		name = "Tier 2", size = "13x13x5",
+		power = "240,000", rods = 6, jumpstart = "85,000",
+		blocks = {pf = 120, tf = 96, sb = 65, plf = 28, pc = 1},
+	},
+	{
+		name = "Tier 3", size = "17x17x5",
+		power = "550,000", rods = 12, jumpstart = "200,000",
+		blocks = {pf = 152, tf = 160, sb = 177, plf = 44, pc = 1},
+	},
 }
 
 -- Runtime [combine atlas — \, escapes commas for the formspec parser
@@ -136,7 +173,7 @@ local function build_page_intro(fs)
 	fs = page_header(fs, "Magnetic Fusion Reactor \xe2\x80\x94 Build Guide")
 
 	local y = 1.5
-	local inc = 0.45
+	local inc = 0.42
 
 	local function line(text)
 		fs = fs .. "label[0.6," .. y .. ";" .. text .. "]"
@@ -147,30 +184,40 @@ local function build_page_intro(fs)
 	local teal = "#00ccaa"
 	local white = "#ffffff"
 	local grey = "#aaaaaa"
+	local green = "#00ff66"
+	local gold = "#ffcc00"
 
-	line(c(white, "The Magnetic Fusion Reactor is a 13x13x5 multiblock"))
-	line(c(white, "structure that generates ") .. c("#00ff66", "240,000 EU") .. c(white, " of power."))
+	line(c(white, "The Magnetic Fusion Reactor comes in 3 tiers."))
+	line(c(white, "Each is a multiblock structure generating power from fuel rods."))
 
-	y = y + 0.2
-	line(c(white, "Fueled by ") .. c(teal, "6") .. c(white, " uranium fuel rods \xe2\x80\x94 each load runs for ") .. c(teal, "8 hours") .. c(white, "."))
-	line(c(white, "Requires ") .. c("#ffcc00", "85,000 EU") .. c(white, " from an HV network for jump start."))
+	y = y + 0.25
+	-- Tier comparison table header
+	fs = fs .. "box[0.5," .. y .. ";8.0,0.35;#1a1a2e]"
+	fs = fs .. "label[0.7," .. (y + 0.2) .. ";"
+		.. c(teal, "Tier") .. "    "
+		.. c(teal, "Power") .. "         "
+		.. c(teal, "Rods") .. "   "
+		.. c(teal, "Jumpstart") .. "        "
+		.. c(teal, "Size") .. "]"
+	y = y + 0.45
 
-	y = y + 0.2
-	line(c(white, "Required blocks:"))
-	line("  " .. c(teal, "120x") .. "  " .. c(white, "Pole Field"))
-	line("  " .. c(teal, " 96x") .. "  " .. c(white, "Toroid Field"))
-	line("  " .. c(teal, " 65x") .. "  " .. c(white, "Steel Block"))
-	line("  " .. c(teal, " 28x") .. "  " .. c(white, "Plasma Field"))
-	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Pole Corrector"))
-	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Fusion Control Panel"))
-	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Plasma Jumpstarter"))
-	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Fusion Power Output"))
+	for _, t in ipairs(TIER_INFO) do
+		line("  " .. c(white, t.name) .. "   "
+			.. c(green, t.power .. " EU") .. "   "
+			.. c(white, t.rods .. " rods") .. "   "
+			.. c(gold, t.jumpstart .. " EU") .. "   "
+			.. c(grey, t.size))
+	end
 
-	y = y + 0.2
-	line(c(grey, "Pages 2-5: Layer-by-layer build guide"))
-	line(c(grey, "Page 6: Complete structure overview"))
-	line(c(grey, "Page 7: Control block placement"))
-	line(c(grey, "Page 8: Startup procedure"))
+	y = y + 0.25
+	line(c(white, "All tiers use 8-hour fuel loads and 5-second charge time."))
+
+	y = y + 0.25
+	line(c(grey, "Pages 2-6: Tier 1 build guide"))
+	line(c(grey, "Pages 7-11: Tier 2 build guide"))
+	line(c(grey, "Pages 12-16: Tier 3 build guide"))
+	line(c(grey, "Page 17: Control block placement"))
+	line(c(grey, "Page 18: Startup procedure"))
 
 	return fs
 end
@@ -205,66 +252,116 @@ local function build_model_page(fs, title, page, legend, notes)
 end
 
 -- ============================================================
--- PAGE 2: BASE PLATFORM (FLOOR)
+-- TIER BUILD PAGES (pages 2-16, 5 pages per tier)
 -- ============================================================
+-- Each tier gets: Floor, Walls, Middle, Roof, Complete 3D.
+-- Page number → tier: tier = floor((page - 2) / 5) + 1
+-- Page number → layer: layer = (page - 2) % 5 + 1
 
-local function build_page_floor(fs)
-	return build_model_page(fs, "Step 1: Base Platform (Bottom Layer)", 2, {
+local LAYER_LEGENDS = {
+	-- 1: Floor
+	{
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, {
-		"13x13 square border of Pole Field with a Steel Block",
-		"cross and corner bolts inside. Build this layer first.",
-	})
-end
-
--- ============================================================
--- PAGE 3: WALL LAYERS
--- ============================================================
-
-local function build_page_walls(fs)
-	return build_model_page(fs, "Step 2: Walls (Layers 2 & 4)", 3, {
+	},
+	-- 2: Walls
+	{
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, {
-		"Cross-shaped layout. Build two identical copies of this layer \xe2\x80\x94",
-		"one directly above the base, one directly below the roof.",
-	})
-end
-
--- ============================================================
--- PAGE 4: MIDDLE LAYER (merged core + plasma ring)
--- ============================================================
-
-local function build_page_middle(fs)
-	return build_model_page(fs, "Step 3: Middle Layer (Core & Plasma Ring)", 4, {
+	},
+	-- 3: Middle
+	{
 		{color = "#33cc33", label = "Plasma Field", width = 2.0},
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#cc44ff", label = "Corrector", width = 1.6},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, {
-		"Pole Corrector at the exact center, surrounded by 3x3 Pole Field ring.",
-		"Green plasma ring loops around the outside. Steel Blocks fill corners.",
-	})
-end
-
--- ============================================================
--- PAGE 5: ROOF
--- ============================================================
-
-local function build_page_roof(fs)
-	return build_model_page(fs, "Step 4: Roof (Top Layer)", 5, {
+	},
+	-- 4: Roof
+	{
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, {
-		"Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.",
-	})
+	},
+	-- 5: Complete
+	{
+		{color = "#e86400", label = "Pole", width = 1.1},
+		{color = "#00cccc", label = "Toroid", width = 1.3},
+		{color = "#33cc33", label = "Plasma", width = 1.3},
+		{color = "#cc44ff", label = "Corrector", width = 1.6},
+		{color = "#888888", label = "Steel", width = 1.2},
+	},
+}
+
+local LAYER_TITLES = {
+	"Base Platform (Bottom Layer)",
+	"Walls (Layers 2 & 4)",
+	"Middle Layer (Core & Plasma Ring)",
+	"Roof (Top Layer)",
+	"Complete 3D View",
+}
+
+local LAYER_NOTES = {
+	-- 1: Floor
+	function(t)
+		return {
+			t.size:sub(1, t.size:find("x") - 1) .. "x" .. t.size:sub(1, t.size:find("x") - 1)
+				.. " square border of Pole Field with a Steel Block",
+			"cross and corner bolts inside. Build this layer first.",
+		}
+	end,
+	-- 2: Walls
+	function(_)
+		return {
+			"Cross-shaped layout. Build two identical copies of this layer \xe2\x80\x94",
+			"one directly above the base, one directly below the roof.",
+		}
+	end,
+	-- 3: Middle
+	function(_)
+		return {
+			"Pole Corrector at the exact center, surrounded by Pole Field ring.",
+			"Green plasma ring loops around the outside. Steel Blocks at corners.",
+		}
+	end,
+	-- 4: Roof
+	function(_)
+		return {
+			"Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.",
+		}
+	end,
+	-- 5: Complete
+	function(t)
+		return {
+			t.name .. ": " .. t.power .. " EU  |  " .. t.rods .. " rods  |  " .. t.size,
+		}
+	end,
+}
+
+local function build_tier_page(fs, page)
+	local tier_idx = math.floor((page - 2) / 5) + 1
+	local layer = (page - 2) % 5 + 1
+	local tier = TIER_INFO[tier_idx]
+
+	local title = tier.name .. " \xe2\x80\x94 " .. LAYER_TITLES[layer]
+	local legend = LAYER_LEGENDS[layer]
+	local notes = LAYER_NOTES[layer](tier)
+
+	if layer == 5 then
+		-- Complete 3D page: larger model, no detailed notes
+		fs = page_header(fs, title)
+		fs = add_model(fs, page, 0.3, 1.2, 8.4, 6.8, 25, -45)
+		fs = fs .. "label[2.8,8.15;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
+		fs = draw_legend(fs, legend, 0.6, 8.5)
+		fs = fs .. "label[0.6,9.0;" .. minetest.formspec_escape(notes[1]) .. "]"
+		return fs
+	end
+
+	return build_model_page(fs, title, page, legend, notes)
 end
 
 -- ============================================================
--- PAGE 7: CONTROL BLOCKS (horizontal layout with side view)
+-- PAGE 17: CONTROL BLOCKS (horizontal layout with side view)
 -- ============================================================
 
 
@@ -277,7 +374,7 @@ local GRID_CONTROL = {
 }
 
 local function build_page_controls(fs)
-	fs = page_header(fs, "Step 5: Control Panel, Jumpstarter & Power Output")
+	fs = page_header(fs, "Control Panel, Jumpstarter & Power Output")
 
 	-- Horizontal row of 3 colored blocks
 	local box_w = 2.2
@@ -339,10 +436,10 @@ end
 -- ============================================================
 
 local function build_page_startup(fs)
-	fs = page_header(fs, "Step 6: Startup Procedure")
+	fs = page_header(fs, "Startup Procedure")
 
 	local y = 1.5
-	local inc = 0.45
+	local inc = 0.42
 	local c = minetest.colorize
 
 	local function line(text)
@@ -350,61 +447,43 @@ local function build_page_startup(fs)
 		y = y + inc
 	end
 
-	line(c("#ffffff", "1. Connect the Jumpstarter to an HV network"))
-	line(c("#aaaaaa", "   (needs ") .. c("#ffcc00", "85,000 EU") .. c("#aaaaaa", " stored)"))
+	line(c("#ffffff", "1. Select tier in the Control Panel"))
+	line(c("#aaaaaa", "   (sets fuel slots and jumpstart energy)"))
 
-	y = y + 0.15
-	line(c("#ffffff", "2. Right-click the Control Panel"))
-	line(c("#aaaaaa", "   \xe2\x86\x92 Click ") .. c("#00ccaa", "[Check Structure]") .. c("#aaaaaa", " to validate"))
+	y = y + 0.12
+	line(c("#ffffff", "2. Connect the Jumpstarter to an HV network"))
+	line(c("#aaaaaa", "   Jumpstart energy by tier:"))
+	line(c("#aaaaaa", "   T1: ") .. c("#ffcc00", "45,000 EU")
+		.. c("#aaaaaa", "  T2: ") .. c("#ffcc00", "85,000 EU")
+		.. c("#aaaaaa", "  T3: ") .. c("#ffcc00", "200,000 EU"))
 
-	y = y + 0.15
-	line(c("#ffffff", "3. Load 6 uranium fuel rods into the fuel slots"))
+	y = y + 0.12
+	line(c("#ffffff", "3. Click ") .. c("#00ccaa", "[Check Structure]") .. c("#ffffff", " to validate"))
 
-	y = y + 0.15
-	line(c("#ffffff", "4. Click ") .. c("#00ccaa", "[Jump Start]"))
-	line(c("#aaaaaa", "   (5-second charge sequence)"))
+	y = y + 0.12
+	line(c("#ffffff", "4. Load uranium fuel rods"))
+	line(c("#aaaaaa", "   T1: 3 rods  |  T2: 6 rods  |  T3: 12 rods"))
 
-	y = y + 0.15
-	line(c("#ffffff", "5. Click ") .. c("#00ccaa", "[Inject Fuel & Start]"))
-	line(c("#aaaaaa", "   Reactor activates \xe2\x80\x94 ") .. c("#00ff66", "240,000 EU") .. c("#aaaaaa", " output"))
+	y = y + 0.12
+	line(c("#ffffff", "5. Click ") .. c("#00ccaa", "[Jump Start]") .. c("#ffffff", " (5-second charge)"))
 
-	y = y + 0.15
-	line(c("#ffffff", "6. Right-click the Power Output block"))
-	line(c("#aaaaaa", "   Set output tier: LV / MV / HV"))
+	y = y + 0.12
+	line(c("#ffffff", "6. Click ") .. c("#00ccaa", "[Inject Fuel & Start]"))
+	line(c("#aaaaaa", "   Power output by tier:"))
+	line(c("#aaaaaa", "   T1: ") .. c("#00ff66", "140,000 EU")
+		.. c("#aaaaaa", "  T2: ") .. c("#00ff66", "240,000 EU")
+		.. c("#aaaaaa", "  T3: ") .. c("#00ff66", "550,000 EU"))
+
+	y = y + 0.12
+	line(c("#ffffff", "7. Right-click Power Output to set tier: LV / MV / HV"))
 
 	-- Divider
-	y = y + 0.3
+	y = y + 0.25
 	fs = fs .. "box[0.6," .. y .. ";7.8,0.02;#333333]"
-	y = y + 0.3
+	y = y + 0.25
 
-	line(c("#aaaaaa", "Deactivating the reactor preserves remaining fuel."))
+	line(c("#aaaaaa", "Deactivating preserves remaining fuel."))
 	line(c("#aaaaaa", "Click ") .. c("#00ccaa", "[Resume Reactor]") .. c("#aaaaaa", " to restart without recharging."))
-
-	return fs
-end
-
--- ============================================================
--- PAGE 6: COMPLETE STRUCTURE — INTERACTIVE 3D MODEL
--- ============================================================
-
-local function build_page_complete(fs)
-	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 3D View")
-
-	-- Large interactive 3D model of the full reactor
-	fs = add_model(fs, 6, 0.3, 1.2, 8.4, 6.8, 25, -45)
-
-	-- Rotate hint
-	fs = fs .. "label[2.8,8.15;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
-
-	-- Condensed legend
-	local legend_y = 8.5
-	fs = draw_legend(fs, {
-		{color = "#e86400", label = "Pole", width = 1.1},
-		{color = "#00cccc", label = "Toroid", width = 1.3},
-		{color = "#33cc33", label = "Plasma", width = 1.3},
-		{color = "#cc44ff", label = "Corrector", width = 1.6},
-		{color = "#888888", label = "Steel", width = 1.2},
-	}, 0.6, legend_y)
 
 	return fs
 end
@@ -413,7 +492,7 @@ end
 -- FORMSPEC SHELL AND NAVIGATION
 -- ============================================================
 
-local PAGE_COUNT = 8
+local PAGE_COUNT = 18
 
 local function build_guide_page(page)
 	local fs = "formspec_version[4]"
@@ -422,14 +501,14 @@ local function build_guide_page(page)
 		.. "no_prepend[]"
 
 	-- Dispatch to page builder
-	if page == 1 then     fs = build_page_intro(fs)
-	elseif page == 2 then fs = build_page_floor(fs)
-	elseif page == 3 then fs = build_page_walls(fs)
-	elseif page == 4 then fs = build_page_middle(fs)
-	elseif page == 5 then fs = build_page_roof(fs)
-	elseif page == 6 then fs = build_page_complete(fs)
-	elseif page == 7 then fs = build_page_controls(fs)
-	elseif page == 8 then fs = build_page_startup(fs)
+	if page == 1 then
+		fs = build_page_intro(fs)
+	elseif page >= 2 and page <= 16 then
+		fs = build_tier_page(fs, page)
+	elseif page == 17 then
+		fs = build_page_controls(fs)
+	elseif page == 18 then
+		fs = build_page_startup(fs)
 	end
 
 	-- Page number (centered)

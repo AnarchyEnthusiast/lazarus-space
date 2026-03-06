@@ -38,9 +38,59 @@ SLOT_MAP = {
 
 NUM_SLOTS = 5
 
-# ---- Grid data (same as guide.lua) ----
+# ---- Grid data: Tier 1 (9×9) ----
 
-GRID_FLOOR = [
+GRID_FLOOR_T1 = [
+    "PPPPPPPPP",
+    "PS..S..SP",
+    "P...S...P",
+    "P...S...P",
+    "PSSSSSSSP",
+    "P...S...P",
+    "P...S...P",
+    "PS..S..SP",
+    "PPPPPPPPP",
+]
+
+GRID_WALLS_T1 = [
+    ".........",
+    ".S..T..S.",
+    "....T....",
+    "....T....",
+    ".TTTaTTT.",
+    "....T....",
+    "....T....",
+    ".S..T..S.",
+    ".........",
+]
+
+GRID_PLASMA_T1 = [
+    ".........",
+    ".SS.T.SS.",
+    ".SCLLLCS.",
+    "..L.T.L..",
+    ".TLT*TLT.",
+    "..L.T.L..",
+    ".SCLLLCS.",
+    ".SS.T.SS.",
+    ".........",
+]
+
+GRID_ROOF_T1 = [
+    "PPPPPPPPP",
+    "PS.....SP",
+    "P.......P",
+    "P.......P",
+    "P.......P",
+    "P.......P",
+    "P.......P",
+    "PS.....SP",
+    "PPPPPPPPP",
+]
+
+# ---- Grid data: Tier 2 (13×13) ----
+
+GRID_FLOOR_T2 = [
     "PPPPPPPPPPPPP",
     "PS....S....SP",
     "P.....S.....P",
@@ -56,7 +106,7 @@ GRID_FLOOR = [
     "PPPPPPPPPPPPP",
 ]
 
-GRID_WALLS = [
+GRID_WALLS_T2 = [
     ".............",
     ".S..T.T.T..S.",
     "....T.T.T....",
@@ -72,7 +122,7 @@ GRID_WALLS = [
     ".............",
 ]
 
-GRID_PLASMA = [
+GRID_PLASMA_T2 = [
     ".............",
     ".SS.T.T.T.SS.",
     ".SLCLLLLLLCS.",
@@ -88,7 +138,7 @@ GRID_PLASMA = [
     ".............",
 ]
 
-GRID_ROOF = [
+GRID_ROOF_T2 = [
     "PPPPPPPPPPPPP",
     "PS.........SP",
     "P...........P",
@@ -104,19 +154,126 @@ GRID_ROOF = [
     "PPPPPPPPPPPPP",
 ]
 
-# ---- Layer definitions ----
+# ---- Grid data: Tier 3 (17×17) ----
+
+GRID_FLOOR_T3 = [
+    "PPPPPPPPPPPPPPPPP",
+    "PSSSSSSSSSSSSSSSP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS.....SSS.....SP",
+    "PSSSSSSSSSSSSSSSP",
+    "PS.....SSS.....SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PS......S......SP",
+    "PSSSSSSSSSSSSSSSP",
+    "PPPPPPPPPPPPPPPPP",
+]
+
+GRID_WALLS_T3 = [
+    ".................",
+    ".SS.T.T.T.T.T.SS.",
+    ".S..T.T.T.T.T..S.",
+    "....T.T.T.T.T....",
+    ".TTT....S....TTT.",
+    "........S........",
+    ".TTT....S....TTT.",
+    ".......PPP.......",
+    ".TTTSSSPaPSSSTTT.",
+    ".......PPP.......",
+    ".TTT....S....TTT.",
+    "........S........",
+    ".TTT....S....TTT.",
+    "....T.T.T.T.T....",
+    ".S..T.T.T.T.T..S.",
+    ".SS.T.T.T.T.T.SS.",
+    ".................",
+]
+
+GRID_PLASMA_T3 = [
+    ".................",
+    ".SS.T.T.T.T.T.SS.",
+    ".SCLLLLLLLLLLLCS.",
+    "..L.T.T.T.T.T.L..",
+    ".TLT....S....TLT.",
+    "..L.....S.....L..",
+    ".TLT....S....TLT.",
+    "..L....PPP....L..",
+    ".TLTSSSP*PSSSTLT.",
+    "..L....PPP....L..",
+    ".TLT....S....TLT.",
+    "..L.....S.....L..",
+    ".TLT....S....TLT.",
+    "..L.T.T.T.T.T.L..",
+    ".SCLLLLLLLLLLLCS.",
+    ".SS.T.T.T.T.T.SS.",
+    ".................",
+]
+
+GRID_ROOF_T3 = [
+    "PPPPPPPPPPPPPPPPP",
+    "PSSS.........SSSP",
+    "PS.............SP",
+    "PS.............SP",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "P...............P",
+    "PS.............SP",
+    "PS.............SP",
+    "PSSS.........SSSP",
+    "PPPPPPPPPPPPPPPPP",
+]
+
+# ---- Layer definitions per tier ----
 
 LAYERS = {
-    "reactor_layer_floor":  [(GRID_FLOOR, -2)],
-    "reactor_layer_walls":  [(GRID_WALLS, -1), (GRID_WALLS, 1)],
-    "reactor_layer_middle": [(GRID_PLASMA, 0)],
-    "reactor_layer_roof":   [(GRID_ROOF, 2)],
-    "reactor_complete":     [
-        (GRID_FLOOR, -2),
-        (GRID_WALLS, -1),
-        (GRID_PLASMA, 0),
-        (GRID_WALLS, 1),
-        (GRID_ROOF, 2),
+    # Tier 1
+    "reactor_t1_floor":    [(GRID_FLOOR_T1, -2)],
+    "reactor_t1_walls":    [(GRID_WALLS_T1, -1), (GRID_WALLS_T1, 1)],
+    "reactor_t1_middle":   [(GRID_PLASMA_T1, 0)],
+    "reactor_t1_roof":     [(GRID_ROOF_T1, 2)],
+    "reactor_t1_complete": [
+        (GRID_FLOOR_T1, -2),
+        (GRID_WALLS_T1, -1),
+        (GRID_PLASMA_T1, 0),
+        (GRID_WALLS_T1, 1),
+        (GRID_ROOF_T1, 2),
+    ],
+    # Tier 2
+    "reactor_t2_floor":    [(GRID_FLOOR_T2, -2)],
+    "reactor_t2_walls":    [(GRID_WALLS_T2, -1), (GRID_WALLS_T2, 1)],
+    "reactor_t2_middle":   [(GRID_PLASMA_T2, 0)],
+    "reactor_t2_roof":     [(GRID_ROOF_T2, 2)],
+    "reactor_t2_complete": [
+        (GRID_FLOOR_T2, -2),
+        (GRID_WALLS_T2, -1),
+        (GRID_PLASMA_T2, 0),
+        (GRID_WALLS_T2, 1),
+        (GRID_ROOF_T2, 2),
+    ],
+    # Tier 3
+    "reactor_t3_floor":    [(GRID_FLOOR_T3, -2)],
+    "reactor_t3_walls":    [(GRID_WALLS_T3, -1), (GRID_WALLS_T3, 1)],
+    "reactor_t3_middle":   [(GRID_PLASMA_T3, 0)],
+    "reactor_t3_roof":     [(GRID_ROOF_T3, 2)],
+    "reactor_t3_complete": [
+        (GRID_FLOOR_T3, -2),
+        (GRID_WALLS_T3, -1),
+        (GRID_PLASMA_T3, 0),
+        (GRID_WALLS_T3, 1),
+        (GRID_ROOF_T3, 2),
     ],
 }
 
@@ -125,11 +282,12 @@ def build_occupied_set(layer_grids):
     """Build a set of all occupied (x, y, z) positions."""
     occupied = set()
     for grid, y_off in layer_grids:
+        center = len(grid[0]) // 2
         for row_idx, row_str in enumerate(grid):
             for col_idx, ch in enumerate(row_str):
                 if ch in SLOT_MAP:
-                    x = col_idx - 6
-                    z = row_idx - 6
+                    x = col_idx - center
+                    z = row_idx - center
                     occupied.add((x, y_off, z))
     return occupied
 
@@ -163,15 +321,16 @@ def generate_obj(name, layer_grids):
     uv_offset = 1
 
     for grid, y_off in layer_grids:
+        center = len(grid[0]) // 2
         for row_idx, row_str in enumerate(grid):
             for col_idx, ch in enumerate(row_str):
                 if ch not in SLOT_MAP:
                     continue
 
                 slot = SLOT_MAP[ch]
-                x = col_idx - 6
+                x = col_idx - center
                 y = y_off
-                z = row_idx - 6
+                z = row_idx - center
 
                 # 8 corner vertices
                 corners = [
@@ -253,11 +412,20 @@ def generate_obj(name, layer_grids):
 
 
 def main():
-    # Remove old files if present
-    mtl_path = os.path.join(MODELS_DIR, "reactor_guide.mtl")
-    if os.path.exists(mtl_path):
-        os.remove(mtl_path)
-        print("Removed old reactor_guide.mtl")
+    # Remove old un-prefixed files
+    old_names = [
+        "reactor_layer_floor.obj",
+        "reactor_layer_walls.obj",
+        "reactor_layer_middle.obj",
+        "reactor_layer_roof.obj",
+        "reactor_complete.obj",
+        "reactor_guide.mtl",
+    ]
+    for old_name in old_names:
+        old_path = os.path.join(MODELS_DIR, old_name)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+            print(f"Removed old {old_name}")
 
     tex_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "textures")
     atlas_path = os.path.join(tex_dir, "lazarus_space_reactor_atlas.png")
@@ -265,7 +433,7 @@ def main():
         os.remove(atlas_path)
         print("Removed old lazarus_space_reactor_atlas.png (no longer needed)")
 
-    # Generate mesh files
+    # Generate mesh files for all tiers
     for name, layer_grids in LAYERS.items():
         generate_obj(name, layer_grids)
 
