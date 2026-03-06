@@ -1,5 +1,5 @@
 -- Lazarus Space: Lazarus Portal Guide Book
--- 5-page guide covering portal system: overview, setup, field, portal, safety.
+-- 4-page guide covering portal system: overview, setup, portal, safety.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -69,6 +69,13 @@ local function build_page_overview(fs)
 	line("  " .. c(teal, "Decaying Uranium") .. c(grey, " (1 piece, portal fuel)"))
 
 	y = y + 0.3
+	line(c(white, "Obtaining Decaying Uranium:"))
+	line("  " .. c(grey, "Build a ") .. c(gold, "Magnetic Fusion Reactor") .. c(grey, " inside the"))
+	line("  " .. c(grey, "disrupted space field. While the reactor core is"))
+	line("  " .. c(grey, "active, break it \xe2\x80\x94 it transmutes into ") .. c(gold, "Decaying Uranium") .. c(grey, "."))
+	line("  " .. c(grey, "Handle with extreme care (see page 4)."))
+
+	y = y + 0.3
 	line(c(white, "The portal is temporary \xe2\x80\x94 it collapses after teleportation,"))
 	line(c(white, "destroying 50% of the terrain inside the field."))
 
@@ -85,7 +92,7 @@ end
 -- ============================================================
 
 local function build_page_setup(fs)
-	fs = page_header(fs, "Step 1: Craft & Power the Disrupter")
+	fs = page_header(fs, "Step 1: Power the Disrupter")
 
 	local c = minetest.colorize
 	local teal = "#00ccaa"
@@ -93,32 +100,7 @@ local function build_page_setup(fs)
 	local grey = "#aaaaaa"
 	local green = "#00ff66"
 
-	-- Crafting grid
-	local grid_x = 1.5
-	local grid_y = 1.3
-	local cell_w = 2.0
-	local cell_h = 0.45
-	local gap = 0.05
-
-	local recipe = {
-		{"Warp Device", "Stainless Steel", "Warp Device"},
-		{"Stainless Steel", "HV Transformer", "Stainless Steel"},
-		{"Warp Device", "Jumpdrive", "Warp Device"},
-	}
-
-	for row = 1, 3 do
-		for col = 1, 3 do
-			local x = grid_x + (col - 1) * (cell_w + gap)
-			local y = grid_y + (row - 1) * (cell_h + gap)
-			fs = fs .. "box[" .. x .. "," .. y .. ";" .. cell_w .. "," .. cell_h .. ";#0d0d1a]"
-			local label = recipe[row][col]
-			fs = fs .. "label[" .. (x + 0.15) .. "," .. (y + 0.05) .. ";"
-				.. c(teal, label) .. "]"
-		end
-	end
-
-	-- Steps
-	local y = grid_y + 3 * (cell_h + gap) + 0.35
+	local y = 1.5
 	local inc = 0.42
 
 	local function line(text)
@@ -141,52 +123,11 @@ local function build_page_setup(fs)
 end
 
 -- ============================================================
--- PAGE 3: FIELD DEPLOYMENT
--- ============================================================
-
-local function build_page_field(fs)
-	fs = page_header(fs, "Step 2: The Disrupted Space Field")
-
-	local y = 1.5
-	local inc = 0.42
-
-	local function line(text)
-		fs = fs .. "label[0.6," .. y .. ";" .. text .. "]"
-		y = y + inc
-	end
-
-	local c = minetest.colorize
-	local teal = "#00ccaa"
-	local white = "#ffffff"
-	local grey = "#aaaaaa"
-
-	line(c(white, "When charging completes, a spherical shell of disrupted"))
-	line(c(white, "space forms around the device (radius 9\xe2\x80\x9318 blocks)."))
-
-	y = y + 0.25
-	line(c(white, "Inside the field:"))
-	line("  " .. c(teal, "\xe2\x80\xa2") .. c(grey, " The device glows and becomes self-sustaining (0 EU)"))
-	line("  " .. c(teal, "\xe2\x80\xa2") .. c(grey, " A 3D starfield appears (the void between dimensions)"))
-	line("  " .. c(teal, "\xe2\x80\xa2") .. c(grey, " All entities are frozen in place"))
-	line("  " .. c(teal, "\xe2\x80\xa2") .. c(grey, " Environmental damage is suppressed"))
-	line("  " .. c(teal, "\xe2\x80\xa2") .. c(grey, " Decaying Uranium is safe to handle"))
-
-	y = y + 0.25
-	line(c(grey, "The field collapses automatically if all players leave."))
-
-	y = y + 0.25
-	line(c(white, "Next: Place a ") .. c(teal, "Warp Device") .. c(white, " inside the field and"))
-	line(c(white, "right-click it while holding ") .. c(teal, "Decaying Uranium") .. c(white, "."))
-
-	return fs
-end
-
--- ============================================================
--- PAGE 4: PORTAL ACTIVATION & TELEPORTATION
+-- PAGE 3: PORTAL ACTIVATION & TELEPORTATION
 -- ============================================================
 
 local function build_page_portal(fs)
-	fs = page_header(fs, "Step 3: Open the Portal")
+	fs = page_header(fs, "Step 2: Open the Portal")
 
 	local y = 1.5
 	local inc = 0.42
@@ -227,7 +168,7 @@ local function build_page_portal(fs)
 end
 
 -- ============================================================
--- PAGE 5: SAFETY & WARNINGS
+-- PAGE 4: SAFETY & WARNINGS
 -- ============================================================
 
 local function build_page_safety(fs)
@@ -278,7 +219,7 @@ end
 -- FORMSPEC SHELL AND NAVIGATION
 -- ============================================================
 
-local PAGE_COUNT = 5
+local PAGE_COUNT = 4
 
 local function build_portal_guide_page(page)
 	local fs = "formspec_version[4]"
@@ -289,9 +230,8 @@ local function build_portal_guide_page(page)
 	-- Dispatch
 	if page == 1 then     fs = build_page_overview(fs)
 	elseif page == 2 then fs = build_page_setup(fs)
-	elseif page == 3 then fs = build_page_field(fs)
-	elseif page == 4 then fs = build_page_portal(fs)
-	elseif page == 5 then fs = build_page_safety(fs)
+	elseif page == 3 then fs = build_page_portal(fs)
+	elseif page == 4 then fs = build_page_safety(fs)
 	end
 
 	-- Navigation
