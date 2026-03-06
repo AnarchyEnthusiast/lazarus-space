@@ -758,6 +758,18 @@ def generate_grid_active():
     return img
 
 
+def generate_grid_filled():
+    """16x16 semi-transparent teal fill with bright border for filled slots."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                img.putpixel((x, y), (0x00, 0xff, 0xcc, 200))
+            else:
+                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 140))
+    return img
+
+
 def generate_crafting_station_3d():
     """16x16 dark metallic block with teal grid pattern for the crafting station."""
     img = Image.new("RGBA", (16, 16))
@@ -951,6 +963,7 @@ def main():
         "lazarus_space_portal_guide.png": generate_portal_guide(),
         "lazarus_space_grid_empty.png": generate_grid_empty(),
         "lazarus_space_grid_active.png": generate_grid_active(),
+        "lazarus_space_grid_filled.png": generate_grid_filled(),
         "lazarus_space_crafting_station_3d.png": generate_crafting_station_3d(),
     }
 

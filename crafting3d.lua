@@ -80,34 +80,6 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- ITEM TEXTURE HELPER
--- ============================================================
-
-local function get_item_texture(item_name)
-	local def = minetest.registered_items[item_name]
-	if not def then return "unknown_item.png" end
-
-	-- Prefer inventory_image (works for all items/nodes)
-	if def.inventory_image and def.inventory_image ~= "" then
-		return def.inventory_image
-	end
-
-	-- Then wield_image
-	if def.wield_image and def.wield_image ~= "" then
-		return def.wield_image
-	end
-
-	-- Fallback to first tile (for regular nodes)
-	if def.tiles and def.tiles[1] then
-		local tex = def.tiles[1]
-		if type(tex) == "table" then tex = tex.name or "" end
-		if tex ~= "" then return tex end
-	end
-
-	return "unknown_item.png"
-end
-
--- ============================================================
 -- ATLAS TEXTURE BUILDER
 -- ============================================================
 
@@ -128,7 +100,7 @@ local function build_atlas_texture(pos, active_layer)
 						and "lazarus_space_grid_active.png"
 						or "lazarus_space_grid_empty.png"
 				else
-					tile = get_item_texture(stack:get_name())
+					tile = "lazarus_space_grid_filled.png"
 				end
 				tex = tex .. ":" .. (slot * 16) .. "\\,0=" .. tile
 				slot = slot + 1
@@ -201,7 +173,7 @@ build_crafting3d_formspec = function(pos)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
-		.. "size[16.8,13.5]"
+		.. "size[16.8,15.5]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -230,9 +202,10 @@ build_crafting3d_formspec = function(pos)
 	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.6,3.36;3.6,3.6;]"
 
 	-- Arrow + output slot (vertically centered with middle row of grid)
-	-- Grid middle row center Y = 3.36 + 1.5 * 1.2 = 5.16
-	fs = fs .. "image[4.68,4.56;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;6.24,4.32;1.2,1.2;]"
+	-- Grid middle row center Y = 3.36 + 1.25 + 0.625 = 5.235
+	-- Arrow Y = 5.235 - 0.6 = 4.635, Output Y = 5.235 - 0.6 = 4.635
+	fs = fs .. "image[4.68,4.64;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;6.24,4.64;1.2,1.2;]"
 
 	-- Player inventory
 	fs = fs .. "list[current_player;main;0.6,10;8,1;]"
