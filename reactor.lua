@@ -1164,25 +1164,49 @@ minetest.register_node("lazarus_space:pole_corrector", {
 	on_rightclick = function(pos, node, clicker, itemstack, pointed_thing)
 		if not clicker:is_player() then return end
 
+		-- Check if reactor is active by searching for a validated control panel
+		local reactor_active = false
+		local search_radius = 8
+		local panels = minetest.find_nodes_in_area(
+			vector.subtract(pos, {x = search_radius, y = 3, z = search_radius}),
+			vector.add(pos, {x = search_radius, y = 3, z = search_radius}),
+			{"lazarus_space:fusion_control_panel"})
+
+		for _, ppos in ipairs(panels) do
+			local pmeta = minetest.get_meta(ppos)
+			if pmeta:get_string("reactor_state") == "active" then
+				reactor_active = true
+				break
+			end
+		end
+
 		local fs = "formspec_version[4]"
-			.. "size[6,7]"
+			.. "size[9,10.5]"
 			.. "bgcolor[#080808;true]"
 			.. "no_prepend[]"
-			.. "box[0,0;6,0.8;#1a1a2e]"
-			.. "label[1.2,0.2;Pole Corrector \xe2\x80\x94 Plasma Diagnostics]"
+			.. "box[0,0;9,0.8;#1a1a2e]"
+			.. "label[2.0,0.2;Pole Corrector \xe2\x80\x94 Plasma Diagnostics]"
 
-		-- Animated plasma visualization
-		fs = fs .. "animated_image[0.65,1;4.7,4.7;plasma_diag;"
-			.. "lazarus_space_plasma_diagnostic.png;20;140;1]"
+		if reactor_active then
+			-- Animated plasma visualization
+			fs = fs .. "animated_image[0.5,1;8,8;plasma_diag;"
+				.. "lazarus_space_plasma_diagnostic.png;40;100;1]"
 
-		-- Legend below the animation
-		fs = fs .. "box[0,5.9;6,1;#0d0d1a]"
-		fs = fs .. "label[0.3,6.05;" .. minetest.colorize("#ff44ff", "\xe2\x97\x8f")
-			.. " " .. minetest.colorize("#aaaaaa", "Plasma Current") .. "    "
-			.. minetest.colorize("#ffcc00", "\xe2\x80\x94")
-			.. " " .. minetest.colorize("#aaaaaa", "Magnetic Field") .. "    "
-			.. minetest.colorize("#cc44ff", "\xe2\x97\x8f")
-			.. " " .. minetest.colorize("#aaaaaa", "Correction") .. "]"
+			-- Legend below the animation
+			fs = fs .. "box[0,9.2;9,1;#0d0d1a]"
+			fs = fs .. "label[0.5,9.35;" .. minetest.colorize("#ff44ff", "\xe2\x97\x8f")
+				.. " " .. minetest.colorize("#aaaaaa", "Plasma Current") .. "    "
+				.. minetest.colorize("#ffcc00", "\xe2\x80\x94")
+				.. " " .. minetest.colorize("#aaaaaa", "Magnetic Field") .. "    "
+				.. minetest.colorize("#cc44ff", "\xe2\x97\x8f")
+				.. " " .. minetest.colorize("#aaaaaa", "Correction") .. "]"
+		else
+			-- Static offline state
+			fs = fs .. "box[0.5,1;8,8;#0a0a12]"
+			fs = fs .. "label[3.2,5;" .. minetest.colorize("#666666", "OFFLINE") .. "]"
+			fs = fs .. "label[2.2,5.5;" .. minetest.colorize("#444444",
+				"Reactor must be active to display diagnostics.") .. "]"
+		end
 
 		minetest.show_formspec(clicker:get_player_name(),
 			"lazarus_space:plasma_diagnostic_" .. minetest.pos_to_string(pos), fs)

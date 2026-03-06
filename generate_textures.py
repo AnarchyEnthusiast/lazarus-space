@@ -707,7 +707,7 @@ def generate_plasma_diagnostic():
     Shows rotating plasma blobs, helical field lines, and pulsing correction.
     """
     FRAME_SIZE = 205
-    FRAME_COUNT = 20
+    FRAME_COUNT = 40
     CENTER = FRAME_SIZE // 2
     OUTER_R = 80
     INNER_R = 48
