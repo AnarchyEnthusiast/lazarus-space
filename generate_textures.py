@@ -735,38 +735,44 @@ def generate_portal_guide():
 
 
 def generate_grid_empty():
-    """16x16 dark semi-transparent outline for empty 3D preview slots."""
+    """16x16 dark solid fill for empty slots on inactive layers."""
     img = Image.new("RGBA", (16, 16))
     for y in range(16):
         for x in range(16):
             if x == 0 or x == 15 or y == 0 or y == 15:
-                img.putpixel((x, y), (0x33, 0x33, 0x33, 100))
+                # Subtle grey border
+                img.putpixel((x, y), (0x44, 0x44, 0x50, 255))
             else:
-                img.putpixel((x, y), (0, 0, 0, 0))
+                # Dark charcoal fill — visible but dim
+                img.putpixel((x, y), (0x1a, 0x1a, 0x22, 255))
     return img
 
 
 def generate_grid_active():
-    """16x16 teal semi-transparent outline for active layer empty slots."""
+    """16x16 dark fill with teal border for active layer empty slots."""
     img = Image.new("RGBA", (16, 16))
     for y in range(16):
         for x in range(16):
             if x == 0 or x == 15 or y == 0 or y == 15:
-                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 160))
+                # Bright teal border
+                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 255))
             else:
-                img.putpixel((x, y), (0, 0, 0, 0))
+                # Dark fill with slight teal tint
+                img.putpixel((x, y), (0x0a, 0x1a, 0x18, 255))
     return img
 
 
 def generate_grid_filled():
-    """16x16 semi-transparent teal fill with bright border for filled slots."""
+    """16x16 solid teal fill with bright border for filled slots."""
     img = Image.new("RGBA", (16, 16))
     for y in range(16):
         for x in range(16):
             if x == 0 or x == 15 or y == 0 or y == 15:
-                img.putpixel((x, y), (0x00, 0xff, 0xcc, 200))
+                # Bright border
+                img.putpixel((x, y), (0x00, 0xff, 0xcc, 255))
             else:
-                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 140))
+                # Solid teal fill — fully opaque
+                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 255))
     return img
 
 
