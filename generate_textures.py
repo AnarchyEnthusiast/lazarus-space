@@ -6,6 +6,7 @@ Requires Pillow: pip install Pillow
 Produces 5 device textures (16x16) and 3 animated textures (16x128, 8 frames).
 """
 
+import math
 import os
 import random
 from PIL import Image
@@ -699,6 +700,110 @@ def generate_disrupted_space_variants():
     return variants
 
 
+def generate_plasma_diagnostic():
+    """Animated plasma diagnostic visualization — top-down torus cross-section.
+
+    128x128 per frame, 20 frames stacked vertically = 128x2560 sprite sheet.
+    Shows rotating plasma blobs, helical field lines, and pulsing correction.
+    """
+    FRAME_SIZE = 128
+    FRAME_COUNT = 20
+    CENTER = FRAME_SIZE // 2
+    OUTER_R = 50
+    INNER_R = 30
+    MID_R = (OUTER_R + INNER_R) // 2  # where plasma blobs orbit
+    POLE_R = 8
+
+    sheet = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE * FRAME_COUNT), (8, 8, 8, 255))
+
+    for frame in range(FRAME_COUNT):
+        img = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (8, 8, 8, 255))
+        phase = frame / FRAME_COUNT * 2 * math.pi
+
+        # 1. Draw torus ring and plasma glow
+        for y in range(FRAME_SIZE):
+            for x in range(FRAME_SIZE):
+                dx, dy = x - CENTER, y - CENTER
+                dist = math.sqrt(dx * dx + dy * dy)
+
+                # Torus vessel walls (orange)
+                if INNER_R <= dist <= OUTER_R:
+                    # Border pixels
+                    if dist <= INNER_R + 1.5 or dist >= OUTER_R - 1.5:
+                        img.putpixel((x, y), (0xb0, 0x50, 0x00, 255))
+                    else:
+                        # Plasma glow inside the ring (magenta, blended)
+                        r, g, b, _ = img.getpixel((x, y))
+                        pr, pg, pb = 0xcc, 0x00, 0xcc
+                        alpha = 160
+                        r = clamp(int(r * (255 - alpha) / 255 + pr * alpha / 255))
+                        g = clamp(int(g * (255 - alpha) / 255 + pg * alpha / 255))
+                        b = clamp(int(b * (255 - alpha) / 255 + pb * alpha / 255))
+                        img.putpixel((x, y), (r, g, b, 255))
+
+                # Center pole (purple)
+                if dist <= POLE_R:
+                    if dist <= POLE_R - 1.5:
+                        img.putpixel((x, y), (0xcc, 0x44, 0xff, 255))
+                    else:
+                        img.putpixel((x, y), (0x99, 0x22, 0xcc, 255))
+
+        # 2. Draw helical field lines (yellow traveling wave)
+        for t in range(360):
+            theta = math.radians(t)
+            r_wave = MID_R + 7 * math.sin(4 * theta + phase * 3)
+            px = CENTER + int(r_wave * math.cos(theta))
+            py = CENTER + int(r_wave * math.sin(theta))
+            if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
+                img.putpixel((px, py), (0xff, 0xcc, 0x00, 255))
+
+        # 3. Draw green toroidal field arrows (rotating)
+        for i in range(6):
+            angle = phase * 0.8 + i * (2 * math.pi / 6)
+            ax = CENTER + int(MID_R * math.cos(angle))
+            ay = CENTER + int(MID_R * math.sin(angle))
+            # Draw small arrowhead (3px triangle)
+            for dy in range(-2, 3):
+                for dx in range(-2, 3):
+                    if abs(dx) + abs(dy) <= 2:
+                        px, py = ax + dx, ay + dy
+                        if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
+                            img.putpixel((px, py), (0x33, 0xcc, 0x33, 255))
+
+        # 4. Draw plasma blobs (bright magenta, rotating)
+        for i in range(8):
+            angle = phase + i * (2 * math.pi / 8)
+            bx = CENTER + int(MID_R * math.cos(angle))
+            by = CENTER + int(MID_R * math.sin(angle))
+            # Draw 3px radius blob
+            for dy in range(-3, 4):
+                for dx in range(-3, 4):
+                    if dx * dx + dy * dy <= 9:
+                        px, py = bx + dx, by + dy
+                        if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
+                            img.putpixel((px, py), (0xff, 0x44, 0xff, 255))
+
+        # 5. Draw correction pulses from center pole (pulsing purple lines)
+        pulse = 0.5 + 0.5 * math.sin(phase * 2)
+        pulse_alpha = int(pulse * 200)
+        for angle_idx in range(4):
+            angle = angle_idx * math.pi / 2
+            for d in range(POLE_R + 2, INNER_R - 2):
+                px = CENTER + int(d * math.cos(angle))
+                py = CENTER + int(d * math.sin(angle))
+                if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
+                    bg_r, bg_g, bg_b, _ = img.getpixel((px, py))
+                    pr, pg, pb = 0xcc, 0x44, 0xff
+                    r = clamp(int(bg_r * (255 - pulse_alpha) / 255 + pr * pulse_alpha / 255))
+                    g = clamp(int(bg_g * (255 - pulse_alpha) / 255 + pg * pulse_alpha / 255))
+                    b = clamp(int(bg_b * (255 - pulse_alpha) / 255 + pb * pulse_alpha / 255))
+                    img.putpixel((px, py), (r, g, b, 255))
+
+        sheet.paste(img, (0, frame * FRAME_SIZE))
+
+    return sheet
+
+
 def main():
     textures = {
         "lazarus_space_disrupter_top.png": generate_disrupter_top(),
@@ -725,6 +830,7 @@ def main():
         "lazarus_space_plasma_jumpstarter.png": generate_plasma_jumpstarter(),
         "lazarus_space_fusion_power_output.png": generate_fusion_power_output(),
         "lazarus_space_reactor_guide.png": generate_reactor_guide(),
+        "lazarus_space_plasma_diagnostic.png": generate_plasma_diagnostic(),
     }
 
     # Add 20 disrupted space opacity variants.

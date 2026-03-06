@@ -1160,6 +1160,33 @@ minetest.register_node("lazarus_space:pole_corrector", {
 	is_ground_content = false,
 	light_source = 4,
 	sounds = default.node_sound_metal_defaults(),
+
+	on_rightclick = function(pos, node, clicker, itemstack, pointed_thing)
+		if not clicker:is_player() then return end
+
+		local fs = "formspec_version[4]"
+			.. "size[6,7]"
+			.. "bgcolor[#080808;true]"
+			.. "no_prepend[]"
+			.. "box[0,0;6,0.8;#1a1a2e]"
+			.. "label[1.2,0.2;Pole Corrector \xe2\x80\x94 Plasma Diagnostics]"
+
+		-- Animated plasma visualization
+		fs = fs .. "animated_image[0.65,1;4.7,4.7;plasma_diag;"
+			.. "lazarus_space_plasma_diagnostic.png;20;100;1]"
+
+		-- Legend below the animation
+		fs = fs .. "box[0,5.9;6,1;#0d0d1a]"
+		fs = fs .. "label[0.3,6.05;" .. minetest.colorize("#ff44ff", "\xe2\x97\x8f")
+			.. " " .. minetest.colorize("#aaaaaa", "Plasma Current") .. "    "
+			.. minetest.colorize("#ffcc00", "\xe2\x80\x94")
+			.. " " .. minetest.colorize("#aaaaaa", "Magnetic Field") .. "    "
+			.. minetest.colorize("#cc44ff", "\xe2\x97\x8f")
+			.. " " .. minetest.colorize("#aaaaaa", "Correction") .. "]"
+
+		minetest.show_formspec(clicker:get_player_name(),
+			"lazarus_space:plasma_diagnostic_" .. minetest.pos_to_string(pos), fs)
+	end,
 })
 
 -- ---- Fusion Control Panel ----
