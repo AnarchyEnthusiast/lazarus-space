@@ -354,34 +354,22 @@ def generate_pole_field():
 
 
 def generate_steel_block():
-    """Grey industrial metal panel, 16x16. Beveled border, 4x4 subdivision
-    grid, rivet dots, brushed metal gradient. Same structure as pole_field
-    but in grey tones."""
+    """Smooth grey metallic block, 16x16. Matches the default:steelblock
+    appearance — uniform light grey with subtle bevel and minimal noise."""
     img = Image.new("RGBA", (16, 16))
     for y in range(16):
         for x in range(16):
-            # Base grey with vertical gradient (lighter top, darker bottom)
-            grad = 1.0 - y / 30.0
-            r = clamp(int(136 * grad))
-            g = clamp(int(136 * grad))
-            b = clamp(int(136 * grad))
+            # Light grey base (~#c8c8c8), nearly uniform
+            r, g, b = 200, 200, 200
 
-            # 1px beveled outer border
+            # Subtle 1px bevel border
             if x == 0 or y == 0:
-                r = clamp(r + 30); g = clamp(g + 30); b = clamp(b + 30)
+                r = clamp(r + 15); g = clamp(g + 15); b = clamp(b + 15)
             if x == 15 or y == 15:
-                r = clamp(r - 40); g = clamp(g - 40); b = clamp(b - 40)
+                r = clamp(r - 20); g = clamp(g - 20); b = clamp(b - 20)
 
-            # 4x4 subdivision grid lines (slightly darker)
-            if x % 4 == 0 or y % 4 == 0:
-                r = clamp(r - 25); g = clamp(g - 25); b = clamp(b - 25)
-
-            # Rivet dots at grid intersections
-            if x % 4 == 0 and y % 4 == 0:
-                r = clamp(r + 40); g = clamp(g + 40); b = clamp(b + 40)
-
-            # Noise for brushed metal feel
-            n = random.randint(-8, 8)
+            # Very subtle noise for smooth brushed metal
+            n = random.randint(-3, 3)
             img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
     return img
 
