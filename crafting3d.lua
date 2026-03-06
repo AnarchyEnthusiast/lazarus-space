@@ -80,99 +80,104 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- 3D MODEL PREVIEW
+-- LAYER GRID VIEWS
 -- ============================================================
 
--- Per-layer texture: 9 tiles in a 144x16 atlas (empty/filled status only)
-local function build_layer_texture(pos, layer_num)
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-	local tex = "[combine:144x16"
-	for i = 0, 8 do
-		local stack = inv:get_stack("layer" .. layer_num, i + 1)
-		local tile
-		if stack:is_empty() then
-			tile = "lazarus_space_grid_active.png"
-		else
-			tile = "lazarus_space_grid_filled.png"
+local function add_layer_grid(fs, pos, layer_num)
+	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
+	local inv_name = "layer" .. layer_num
+
+	-- Background panel
+	local panel_x = 1.0
+	local panel_y = 2.8
+	local panel_w = 9.6
+	local panel_h = 6.4
+	fs = fs .. "box[" .. panel_x .. "," .. panel_y .. ";"
+		.. panel_w .. "," .. panel_h .. ";#0a0a12]"
+
+	-- Layer label centered above grid
+	fs = fs .. "label[" .. (panel_x + panel_w / 2 - 1.2) .. "," .. (panel_y + 0.2)
+		.. ";" .. minetest.colorize("#00ccaa", "Layer " .. layer_num
+		.. " (Y=" .. layer_num .. ")") .. "]"
+
+	-- 3x3 inventory grid — large slots for direct item placement
+	local slot_size = 1.5
+	local slot_gap = 0.2
+	local grid_w = 3 * slot_size + 2 * slot_gap  -- 4.9
+	local grid_x = panel_x + (panel_w - grid_w) / 2
+	local grid_y = panel_y + 1.0
+
+	-- Draw slot backgrounds
+	for row = 0, 2 do
+		for col = 0, 2 do
+			local sx = grid_x + col * (slot_size + slot_gap)
+			local sy = grid_y + row * (slot_size + slot_gap)
+			fs = fs .. "box[" .. sx .. "," .. sy .. ";"
+				.. slot_size .. "," .. slot_size .. ";#111122]"
 		end
-		tex = tex .. ":" .. (i * 16) .. "\\,0=" .. tile
 	end
-	return tex
+
+	-- Actual inventory list on top of the backgrounds
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";"
+		.. grid_x .. "," .. grid_y .. ";3,3;]"
+
+	return fs
 end
 
--- Full cube texture: 27 tiles in a 432x16 atlas (empty/filled status only)
-local function build_full_texture(pos, active_layer)
+local function add_all_layers_view(fs, pos)
+	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
-	local tex = "[combine:432x16"
-	local slot = 0
+
+	-- Background panel
+	fs = fs .. "box[0.6,2.8;10.0,6.4;#0a0a12]"
+	fs = fs .. "label[3.2,2.96;" .. minetest.colorize("#aaaaaa",
+		"All Layers \xe2\x80\x94 switch to Layer 1/2/3 to edit") .. "]"
+
+	-- Draw 3 layers stacked: layer 1 at bottom, layer 3 at top
+	local slot_size = 0.9
+	local slot_gap = 0.1
+	local grid_w = 3 * slot_size + 2 * slot_gap  -- 2.9
+
+	-- Base position for layer 1 (bottom-left)
+	local base_x = 2.0
+	local base_y = 7.0
+
+	-- Per-layer offset for stacking effect
+	local offset_x = 0.8
+	local offset_y = -1.6
+
 	for layer = 1, 3 do
-		for i = 1, 9 do
-			local stack = inv:get_stack("layer" .. layer, i)
-			local tile
-			if stack:is_empty() then
-				if layer == active_layer or active_layer == 4 then
-					tile = "lazarus_space_grid_active.png"
-				else
-					tile = "lazarus_space_grid_empty.png"
-				end
-			else
-				tile = "lazarus_space_grid_filled.png"
-			end
-			tex = tex .. ":" .. (slot * 16) .. "\\,0=" .. tile
-			slot = slot + 1
-		end
-	end
-	return tex
-end
+		local lx = base_x + (layer - 1) * offset_x
+		local ly = base_y + (layer - 1) * offset_y
 
-local function add_cube_preview(fs, pos, active_layer)
-	local atlas_tex
-	local mesh
+		-- Layer background with slight color variation
+		local bg_alpha = layer == 1 and "#0d0d1a" or (layer == 2 and "#0f0f1e" or "#111122")
+		fs = fs .. "box[" .. (lx - 0.1) .. "," .. (ly - 0.3) .. ";"
+			.. (grid_w + 0.2) .. "," .. (grid_w + 0.5) .. ";" .. bg_alpha .. "]"
 
-	if active_layer >= 1 and active_layer <= 3 then
-		atlas_tex = build_layer_texture(pos, active_layer)
-		mesh = "crafting3d_layer.obj"
-		fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-			"Layer " .. active_layer) .. "]"
-	else
-		atlas_tex = build_full_texture(pos, active_layer)
-		mesh = "crafting3d_full.obj"
-		fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-			"All Layers") .. "]"
-	end
+		-- Layer number label
+		fs = fs .. "label[" .. lx .. "," .. (ly - 0.2) .. ";"
+			.. minetest.colorize("#00ccaa", "L" .. layer) .. "]"
 
-	fs = fs .. "model[8.76,1.8;7.08,6.24;craft3d_preview;"
-		.. mesh .. ";" .. atlas_tex
-		.. ";20,-30;false;true]"
+		-- Show items using item_image[] (read-only visual)
+		for row = 0, 2 do
+			for col = 0, 2 do
+				local idx = row * 3 + col + 1
+				local sx = lx + col * (slot_size + slot_gap)
+				local sy = ly + row * (slot_size + slot_gap)
 
-	-- Overlay wield item images on filled slots (per-layer only)
-	if active_layer >= 1 and active_layer <= 3 then
-		local meta = minetest.get_meta(pos)
-		local inv = meta:get_inventory()
-		-- Model viewport: x=8.76, y=1.8, w=7.08, h=6.24
-		local img_size = 1.2
-		local mx = 8.76
-		local my = 1.8
-		local mw = 7.08
-		local mh = 6.24
-		-- Grid center in viewport
-		local cx = mx + mw / 2
-		local cy = my + mh / 2
-		-- Spacing between slots in screen coords (approximate for 20,-30 rotation)
-		local sx = 1.6
-		local sy = 1.4
+				local stack = inv:get_stack("layer" .. layer, idx)
 
-		for row = 1, 3 do
-			for col = 1, 3 do
-				local idx = (row - 1) * 3 + col
-				local stack = inv:get_stack("layer" .. active_layer, idx)
+				-- Slot background
+				local slot_color = stack:is_empty() and "#1a1a22" or "#0a2a25"
+				fs = fs .. "box[" .. sx .. "," .. sy .. ";"
+					.. slot_size .. "," .. slot_size .. ";" .. slot_color .. "]"
+
+				-- Item image if slot is filled
 				if not stack:is_empty() then
-					local ix = cx + (col - 2) * sx - img_size / 2
-					local iy = cy + (row - 2) * sy - img_size / 2
-					fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
-						.. img_size .. "," .. img_size .. ";"
+					fs = fs .. "item_image[" .. sx .. "," .. sy .. ";"
+						.. slot_size .. "," .. slot_size .. ";"
 						.. stack:get_name() .. "]"
 				end
 			end
@@ -228,10 +233,6 @@ build_crafting3d_formspec = function(pos)
 	local meta = minetest.get_meta(pos)
 	local layer = meta:get_int("active_layer")
 	if layer < 1 or layer > 4 then layer = 1 end
-
-	local inv_layer = layer
-	if layer == 4 then inv_layer = 1 end  -- default to layer 1 for editing
-	local inv_name = "layer" .. inv_layer
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
@@ -255,8 +256,7 @@ build_crafting3d_formspec = function(pos)
 				btn_name, tostring(i), "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 		end
 	end
-
-	-- "All" button at position 4
+	-- "All" button
 	if layer == 4 then
 		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
 			"layer_4", "All", "#00ccaa", "#00ddbb", "#009988")
@@ -265,39 +265,28 @@ build_crafting3d_formspec = function(pos)
 			"layer_4", "All", "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 	end
 
-	-- Layer label
-	if layer == 4 then
-		fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
-			"Viewing All Layers") .. "]"
+	-- Main crafting area
+	if layer >= 1 and layer <= 3 then
+		fs = add_layer_grid(fs, pos, layer)
 	else
-		fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
-			"Editing Layer " .. layer .. " (Y=" .. layer .. ")") .. "]"
+		fs = add_all_layers_view(fs, pos)
 	end
 
-	-- 3x3 crafting grid for the active layer (nodemeta for named formspec)
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.6,3.36;3.6,3.6;]"
-
-	-- Arrow + output slot (vertically centered with middle row of grid)
-	-- Grid middle row center Y = 3.36 + 1.25 + 0.625 = 5.235
-	-- Arrow Y = 5.235 - 0.6 = 4.635, Output Y = 5.235 - 0.6 = 4.635
-	fs = fs .. "image[4.68,4.64;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;6.24,4.64;1.2,1.2;]"
+	-- Arrow + output slot (right of the crafting grid)
+	fs = fs .. "image[9.8,4.64;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;11.4,4.64;1.2,1.2;]"
 
 	-- Player inventory
 	fs = fs .. "list[current_player;main;0.6,10;8,1;]"
 		.. "list[current_player;main;0.6,11.25;8,3;8]"
 
-	-- Shift-click targets
-	fs = fs .. "listring[nodemeta:" .. pos_str .. ";" .. inv_name .. "]"
+	-- Shift-click targets (use current editing layer)
+	local shift_layer = layer
+	if shift_layer == 4 then shift_layer = 1 end
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. shift_layer .. "]"
 		.. "listring[current_player;main]"
 		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
-
-	-- 3D model preview (right side)
-	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
-	fs = fs .. "label[9.6,1.32;" .. minetest.colorize("#aaaaaa",
-		"3D Preview \xe2\x80\x94 click & drag to rotate") .. "]"
-	fs = add_cube_preview(fs, pos, layer)
 
 	return fs
 end
