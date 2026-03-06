@@ -1173,7 +1173,7 @@ minetest.register_node("lazarus_space:pole_corrector", {
 
 		-- Animated plasma visualization
 		fs = fs .. "animated_image[0.65,1;4.7,4.7;plasma_diag;"
-			.. "lazarus_space_plasma_diagnostic.png;20;100;1]"
+			.. "lazarus_space_plasma_diagnostic.png;20;140;1]"
 
 		-- Legend below the animation
 		fs = fs .. "box[0,5.9;6,1;#0d0d1a]"

@@ -706,13 +706,13 @@ def generate_plasma_diagnostic():
     128x128 per frame, 20 frames stacked vertically = 128x2560 sprite sheet.
     Shows rotating plasma blobs, helical field lines, and pulsing correction.
     """
-    FRAME_SIZE = 128
+    FRAME_SIZE = 205
     FRAME_COUNT = 20
     CENTER = FRAME_SIZE // 2
-    OUTER_R = 50
-    INNER_R = 30
+    OUTER_R = 80
+    INNER_R = 48
     MID_R = (OUTER_R + INNER_R) // 2  # where plasma blobs orbit
-    POLE_R = 8
+    POLE_R = 13
 
     sheet = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE * FRAME_COUNT), (8, 8, 8, 255))
 
@@ -751,7 +751,7 @@ def generate_plasma_diagnostic():
         # 2. Draw helical field lines (yellow traveling wave)
         for t in range(360):
             theta = math.radians(t)
-            r_wave = MID_R + 7 * math.sin(4 * theta + phase * 3)
+            r_wave = MID_R + 11 * math.sin(4 * theta + phase * 3)
             px = CENTER + int(r_wave * math.cos(theta))
             py = CENTER + int(r_wave * math.sin(theta))
             if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
@@ -762,10 +762,10 @@ def generate_plasma_diagnostic():
             angle = phase * 0.8 + i * (2 * math.pi / 6)
             ax = CENTER + int(MID_R * math.cos(angle))
             ay = CENTER + int(MID_R * math.sin(angle))
-            # Draw small arrowhead (3px triangle)
-            for dy in range(-2, 3):
-                for dx in range(-2, 3):
-                    if abs(dx) + abs(dy) <= 2:
+            # Draw small arrowhead (5px diamond)
+            for dy in range(-3, 4):
+                for dx in range(-3, 4):
+                    if abs(dx) + abs(dy) <= 3:
                         px, py = ax + dx, ay + dy
                         if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
                             img.putpixel((px, py), (0x33, 0xcc, 0x33, 255))
@@ -775,10 +775,10 @@ def generate_plasma_diagnostic():
             angle = phase + i * (2 * math.pi / 8)
             bx = CENTER + int(MID_R * math.cos(angle))
             by = CENTER + int(MID_R * math.sin(angle))
-            # Draw 3px radius blob
-            for dy in range(-3, 4):
-                for dx in range(-3, 4):
-                    if dx * dx + dy * dy <= 9:
+            # Draw 5px radius blob
+            for dy in range(-5, 6):
+                for dx in range(-5, 6):
+                    if dx * dx + dy * dy <= 25:
                         px, py = bx + dx, by + dy
                         if 0 <= px < FRAME_SIZE and 0 <= py < FRAME_SIZE:
                             img.putpixel((px, py), (0xff, 0x44, 0xff, 255))
