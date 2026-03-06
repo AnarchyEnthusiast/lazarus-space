@@ -127,42 +127,12 @@ local function build_layer_textures(pos, layer_num)
 	return table.concat(textures, ",")
 end
 
-local function build_full_textures(pos)
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-	local textures = {}
-	local idx = 1
-	for layer = 1, 3 do
-		for i = 1, 9 do
-			local stack = inv:get_stack("layer" .. layer, i)
-			if stack:is_empty() then
-				textures[idx] = "lazarus_space_grid_active.png"
-			elseif is_normal_node(stack:get_name()) then
-				textures[idx] = get_node_tile(stack:get_name())
-			else
-				textures[idx] = "lazarus_space_grid_filled.png"
-			end
-			idx = idx + 1
-		end
-	end
-	return table.concat(textures, ",")
-end
 
 local function add_cube_preview(fs, pos, active_layer)
-	local tex_str
-	local mesh
-
-	if active_layer >= 1 and active_layer <= 3 then
-		tex_str = build_layer_textures(pos, active_layer)
-		mesh = "crafting3d_layer.obj"
-		fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-			"Layer " .. active_layer) .. "]"
-	else
-		tex_str = build_full_textures(pos)
-		mesh = "crafting3d_full.obj"
-		fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-			"All Layers") .. "]"
-	end
+	local tex_str = build_layer_textures(pos, active_layer)
+	local mesh = "crafting3d_layer.obj"
+	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
+		"Layer " .. active_layer) .. "]"
 
 	-- Unique model name prevents texture caching between formspec updates
 	local model_name = "craft3d_" .. os.time() .. "_" .. math.random(10000)
@@ -171,27 +141,25 @@ local function add_cube_preview(fs, pos, active_layer)
 		.. mesh .. ";" .. tex_str
 		.. ";20,-30;false;true]"
 
-	-- Overlay item_image[] for non-normal items (per-layer view only)
-	if active_layer >= 1 and active_layer <= 3 then
-		local meta = minetest.get_meta(pos)
-		local inv = meta:get_inventory()
-		local img_size = 1.2
-		local cx = 8.64 + 7.32 / 2
-		local cy = 1.8 + 6.36 / 2
-		local sx = 1.6
-		local sy = 1.4
+	-- Overlay item_image[] for non-normal items (wield texture centered on cube)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
+	local img_size = 1.2
+	local cx = 8.64 + 7.32 / 2
+	local cy = 1.8 + 6.36 / 2
+	local sx_step = 1.6
+	local sy_step = 1.4
 
-		for row = 1, 3 do
-			for col = 1, 3 do
-				local idx = (row - 1) * 3 + col
-				local stack = inv:get_stack("layer" .. active_layer, idx)
-				if not stack:is_empty() and not is_normal_node(stack:get_name()) then
-					local ix = cx + (col - 2) * sx - img_size / 2
-					local iy = cy + (row - 2) * sy - img_size / 2
-					fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
-						.. img_size .. "," .. img_size .. ";"
-						.. stack:get_name() .. "]"
-				end
+	for row = 1, 3 do
+		for col = 1, 3 do
+			local idx = (row - 1) * 3 + col
+			local stack = inv:get_stack("layer" .. active_layer, idx)
+			if not stack:is_empty() and not is_normal_node(stack:get_name()) then
+				local ix = cx + (col - 2) * sx_step - img_size / 2
+				local iy = cy + (row - 2) * sy_step - img_size / 2
+				fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
+					.. img_size .. "," .. img_size .. ";"
+					.. stack:get_name() .. "]"
 			end
 		end
 	end
@@ -207,7 +175,7 @@ local function add_layer_grid(fs, pos, layer_num)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 	local inv_name = "layer" .. layer_num
 
-	-- Background panel (left side, narrower)
+	-- Background panel (left side)
 	local panel_x = 0.3
 	local panel_y = 2.8
 	local panel_w = 7.6
@@ -220,82 +188,12 @@ local function add_layer_grid(fs, pos, layer_num)
 		.. ";" .. minetest.colorize("#00ccaa", "Layer " .. layer_num
 		.. " (Y=" .. layer_num .. ")") .. "]"
 
-	-- 3x3 inventory grid
-	local slot_size = 1.2
-	local slot_gap = 0.15
-	local grid_w = 3 * slot_size + 2 * slot_gap  -- 3.9
-	local grid_x = panel_x + (panel_w - grid_w) / 2
+	-- 3x3 inventory grid — no box[] backgrounds, list[] renders its own slots
+	local grid_x = panel_x + (panel_w - 3.9) / 2
 	local grid_y = panel_y + 0.8
 
-	-- Slot backgrounds
-	for row = 0, 2 do
-		for col = 0, 2 do
-			local sx = grid_x + col * (slot_size + slot_gap)
-			local sy = grid_y + row * (slot_size + slot_gap)
-			fs = fs .. "box[" .. sx .. "," .. sy .. ";"
-				.. slot_size .. "," .. slot_size .. ";#111122]"
-		end
-	end
-
-	-- Inventory list
 	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";"
 		.. grid_x .. "," .. grid_y .. ";3,3;]"
-
-	return fs
-end
-
-local function add_all_layers_view(fs, pos)
-	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-
-	-- Background panel (left side)
-	fs = fs .. "box[0.3,2.8;7.6,6.0;#0a0a12]"
-	fs = fs .. "label[1.6,2.96;" .. minetest.colorize("#aaaaaa",
-		"All Layers \xe2\x80\x94 switch to 1/2/3 to edit") .. "]"
-
-	local slot_size = 0.8
-	local slot_gap = 0.1
-	local grid_w = 3 * slot_size + 2 * slot_gap  -- 2.6
-
-	-- Base position for layer 1 (bottom)
-	local base_x = 1.4
-	local base_y = 6.8
-
-	-- Per-layer stacking offset
-	local offset_x = 0.7
-	local offset_y = -1.4
-
-	for layer = 1, 3 do
-		local lx = base_x + (layer - 1) * offset_x
-		local ly = base_y + (layer - 1) * offset_y
-
-		local bg_color = layer == 1 and "#0d0d1a" or (layer == 2 and "#0f0f1e" or "#111122")
-		fs = fs .. "box[" .. (lx - 0.1) .. "," .. (ly - 0.3) .. ";"
-			.. (grid_w + 0.2) .. "," .. (grid_w + 0.5) .. ";" .. bg_color .. "]"
-
-		fs = fs .. "label[" .. lx .. "," .. (ly - 0.2) .. ";"
-			.. minetest.colorize("#00ccaa", "L" .. layer) .. "]"
-
-		for row = 0, 2 do
-			for col = 0, 2 do
-				local idx = row * 3 + col + 1
-				local sx = lx + col * (slot_size + slot_gap)
-				local sy = ly + row * (slot_size + slot_gap)
-				local stack = inv:get_stack("layer" .. layer, idx)
-
-				local slot_color = stack:is_empty() and "#1a1a22" or "#0a2a25"
-				fs = fs .. "box[" .. sx .. "," .. sy .. ";"
-					.. slot_size .. "," .. slot_size .. ";" .. slot_color .. "]"
-
-				if not stack:is_empty() then
-					fs = fs .. "item_image[" .. sx .. "," .. sy .. ";"
-						.. slot_size .. "," .. slot_size .. ";"
-						.. stack:get_name() .. "]"
-				end
-			end
-		end
-	end
 
 	return fs
 end
@@ -345,7 +243,7 @@ end
 build_crafting3d_formspec = function(pos)
 	local meta = minetest.get_meta(pos)
 	local layer = meta:get_int("active_layer")
-	if layer < 1 or layer > 4 then layer = 1 end
+	if layer < 1 or layer > 3 then layer = 1 end
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
@@ -369,21 +267,9 @@ build_crafting3d_formspec = function(pos)
 				btn_name, tostring(i), "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 		end
 	end
-	-- "All" button
-	if layer == 4 then
-		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
-			"layer_4", "All", "#00ccaa", "#00ddbb", "#009988")
-	else
-		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
-			"layer_4", "All", "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
-	end
 
 	-- Left side: crafting grid (direct item placement)
-	if layer >= 1 and layer <= 3 then
-		fs = add_layer_grid(fs, pos, layer)
-	else
-		fs = add_all_layers_view(fs, pos)
-	end
+	fs = add_layer_grid(fs, pos, layer)
 
 	-- Right side: 3D preview
 	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
@@ -399,10 +285,8 @@ build_crafting3d_formspec = function(pos)
 	fs = fs .. "list[current_player;main;0.6,10;8,1;]"
 		.. "list[current_player;main;0.6,11.25;8,3;8]"
 
-	-- Shift-click targets (use current editing layer)
-	local shift_layer = layer
-	if shift_layer == 4 then shift_layer = 1 end
-	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. shift_layer .. "]"
+	-- Shift-click targets
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. layer .. "]"
 		.. "listring[current_player;main]"
 		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
@@ -484,7 +368,7 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 	local node = minetest.get_node(pos)
 	if node.name ~= "lazarus_space:crafting_station_3d" then return end
 
-	for i = 1, 4 do
+	for i = 1, 3 do
 		if fields["layer_" .. i] then
 			local meta = minetest.get_meta(pos)
 			meta:set_int("active_layer", i)
