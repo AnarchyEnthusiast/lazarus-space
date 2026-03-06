@@ -85,14 +85,25 @@ end
 
 local function get_item_texture(item_name)
 	local def = minetest.registered_items[item_name]
-	if def then
-		local tex = def.inventory_image or ""
-		if tex == "" and def.tiles and def.tiles[1] then
-			tex = def.tiles[1]
-			if type(tex) == "table" then tex = tex.name or "" end
-		end
+	if not def then return "unknown_item.png" end
+
+	-- Prefer inventory_image (works for all items/nodes)
+	if def.inventory_image and def.inventory_image ~= "" then
+		return def.inventory_image
+	end
+
+	-- Then wield_image
+	if def.wield_image and def.wield_image ~= "" then
+		return def.wield_image
+	end
+
+	-- Fallback to first tile (for regular nodes)
+	if def.tiles and def.tiles[1] then
+		local tex = def.tiles[1]
+		if type(tex) == "table" then tex = tex.name or "" end
 		if tex ~= "" then return tex end
 	end
+
 	return "unknown_item.png"
 end
 
@@ -133,7 +144,7 @@ end
 
 local function add_cube_preview(fs, pos, active_layer)
 	local atlas_tex = build_atlas_texture(pos, active_layer)
-	fs = fs .. "model[7.3,1.5;5.9,5.2;craft3d_preview;"
+	fs = fs .. "model[8.76,1.8;7.08,6.24;craft3d_preview;"
 		.. "crafting3d_grid.obj;" .. atlas_tex
 		.. ";20,-30;false;true]"
 	return fs
@@ -190,41 +201,42 @@ build_crafting3d_formspec = function(pos)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
-		.. "size[14,10]"
+		.. "size[16.8,13.5]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
 	-- Title
-	fs = fs .. "box[0,0;14,0.8;#1a1a2e]"
-		.. "label[4.5,0.2;Dimensional Crafting Station]"
+	fs = fs .. "box[0,0;16.8,0.96;#1a1a2e]"
+		.. "label[5.4,0.24;Dimensional Crafting Station]"
 
 	-- Layer selection buttons
-	fs = fs .. "label[0.5,1.2;Layer:]"
+	fs = fs .. "label[0.6,1.44;Layer:]"
 	for i = 1, 3 do
 		local btn_name = "layer_" .. i
 		if i == layer then
-			fs = styled_btn(fs, 0.5 + (i - 1) * 1.3, 1.5, 1.1, 0.7,
+			fs = styled_btn(fs, 0.6 + (i - 1) * 1.56, 1.8, 1.32, 0.84,
 				btn_name, tostring(i), "#00ccaa", "#00ddbb", "#009988")
 		else
-			fs = styled_btn(fs, 0.5 + (i - 1) * 1.3, 1.5, 1.1, 0.7,
+			fs = styled_btn(fs, 0.6 + (i - 1) * 1.56, 1.8, 1.32, 0.84,
 				btn_name, tostring(i), "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 		end
 	end
 
 	-- Layer label
-	fs = fs .. "label[0.5,2.5;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
 		"Editing Layer " .. layer .. " (Y=" .. layer .. ")") .. "]"
 
 	-- 3x3 crafting grid for the active layer (nodemeta for named formspec)
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.5,2.8;3,3;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.6,3.36;3.6,3.6;]"
 
-	-- Arrow + output slot
-	fs = fs .. "image[3.9,3.8;1,1;gui_furnace_arrow_bg.png^[transformR270]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;5.2,3.6;1,1;]"
+	-- Arrow + output slot (vertically centered with middle row of grid)
+	-- Grid middle row center Y = 3.36 + 1.5 * 1.2 = 5.16
+	fs = fs .. "image[4.68,4.56;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;6.24,4.32;1.2,1.2;]"
 
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0.5,7.5;8,1;]"
-		.. "list[current_player;main;0.5,8.7;8,3;8]"
+	fs = fs .. "list[current_player;main;0.6,10;8,1;]"
+		.. "list[current_player;main;0.6,11.25;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";" .. inv_name .. "]"
@@ -233,8 +245,8 @@ build_crafting3d_formspec = function(pos)
 		.. "listring[current_player;main]"
 
 	-- 3D cube preview (right side)
-	fs = fs .. "box[7,1;6.5,6;#0a0a12]"
-	fs = fs .. "label[8.5,1.1;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
+	fs = fs .. "label[10.2,1.32;" .. minetest.colorize("#aaaaaa",
 		"3D Preview \xe2\x80\x94 click & drag to rotate") .. "]"
 	fs = add_cube_preview(fs, pos, layer)
 
@@ -337,5 +349,56 @@ minetest.register_craft({
 		{"default:steelblock", "lazarus_space:pole_field", "default:steelblock"},
 		{"lazarus_space:pole_field", "default:diamondblock", "lazarus_space:pole_field"},
 		{"default:steelblock", "lazarus_space:pole_field", "default:steelblock"},
+	},
+})
+
+-- ============================================================
+-- 3D CRAFTING RECIPES
+-- ============================================================
+
+-- Diamond pillar: 3 diamonds stacked vertically → diamond block
+lazarus_space.register_3d_craft({
+	output = "default:diamondblock",
+	recipe = {
+		-- Layer 1 (bottom)
+		{"", "", "",  "", "default:diamond", "",  "", "", ""},
+		-- Layer 2 (middle)
+		{"", "", "",  "", "default:diamond", "",  "", "", ""},
+		-- Layer 3 (top)
+		{"", "", "",  "", "default:diamond", "",  "", "", ""},
+	},
+})
+
+-- Steel cage: steel ingots forming cube frame → 2 steel blocks
+lazarus_space.register_3d_craft({
+	output = "default:steelblock 2",
+	recipe = {
+		-- Layer 1 (bottom): full 3x3 ring
+		{"default:steel_ingot", "default:steel_ingot", "default:steel_ingot",
+		 "default:steel_ingot", "",                    "default:steel_ingot",
+		 "default:steel_ingot", "default:steel_ingot", "default:steel_ingot"},
+		-- Layer 2 (middle): 4 corners only
+		{"default:steel_ingot", "", "default:steel_ingot",
+		 "",                    "", "",
+		 "default:steel_ingot", "", "default:steel_ingot"},
+		-- Layer 3 (top): full 3x3 ring
+		{"default:steel_ingot", "default:steel_ingot", "default:steel_ingot",
+		 "default:steel_ingot", "",                    "default:steel_ingot",
+		 "default:steel_ingot", "default:steel_ingot", "default:steel_ingot"},
+	},
+})
+
+-- Pole field from pole corrector core: corrector centered with 6 steel → 4 pole field
+lazarus_space.register_3d_craft({
+	output = "lazarus_space:pole_field 4",
+	recipe = {
+		-- Layer 1: steel in center
+		{"", "", "",  "", "default:steelblock", "",  "", "", ""},
+		-- Layer 2: steel cross around pole corrector
+		{"", "default:steelblock", "",
+		 "default:steelblock", "lazarus_space:pole_corrector", "default:steelblock",
+		 "", "default:steelblock", ""},
+		-- Layer 3: steel in center
+		{"", "", "",  "", "default:steelblock", "",  "", "", ""},
 	},
 })
