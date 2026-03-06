@@ -80,37 +80,77 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- ATLAS TEXTURE BUILDER
+-- BOX GRID PREVIEW
 -- ============================================================
 
-local function build_atlas_texture(pos, active_layer)
+local function add_all_layers_preview(fs, pos)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
-	-- Start with pre-baked base atlas (9 tiles, all "active empty" style)
-	local tex = "lazarus_space_crafting3d_atlas.png"
-	-- Overlay solid teal fill for each occupied slot on the active layer
-	for i = 1, 9 do
-		local stack = inv:get_stack("layer" .. active_layer, i)
-		if not stack:is_empty() then
-			local x = (i - 1) * 16
-			tex = tex .. "^[fill:16x16:" .. x .. "\\,0:#00ccaaff"
+
+	local box_size = 0.7
+	local gap = 0.06
+	local grid_w = 3 * box_size + 2 * gap  -- 2.22
+	local grid_gap = 0.36  -- space between grids
+	local total_w = 3 * grid_w + 2 * grid_gap  -- 7.38
+	local start_x = 8.4 + (7.8 - total_w) / 2  -- centered
+	local start_y = 3.0
+
+	for layer = 1, 3 do
+		local gx = start_x + (layer - 1) * (grid_w + grid_gap)
+
+		-- Layer label
+		fs = fs .. "label[" .. (gx + grid_w / 2 - 0.6) .. ",2.2;"
+			.. minetest.colorize("#aaaaaa", "Layer " .. layer) .. "]"
+
+		for row = 1, 3 do
+			for col = 1, 3 do
+				local idx = (row - 1) * 3 + col
+				local stack = inv:get_stack("layer" .. layer, idx)
+				local color = stack:is_empty() and "#1a1a22" or "#00ccaa"
+				local bx = gx + (col - 1) * (box_size + gap)
+				local by = start_y + (row - 1) * (box_size + gap)
+				fs = fs .. "box[" .. bx .. "," .. by .. ";"
+					.. box_size .. "," .. box_size .. ";" .. color .. "]"
+			end
 		end
 	end
-	return tex
+
+	return fs
 end
 
--- ============================================================
--- 3D CUBE PREVIEW
--- ============================================================
+local function add_box_preview(fs, pos, active_layer)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
 
-local function add_cube_preview(fs, pos, active_layer)
-	local atlas_tex = build_atlas_texture(pos, active_layer)
-	-- Layer indicator above preview
-	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-		"Layer " .. active_layer) .. "]"
-	fs = fs .. "model[8.76,1.8;7.08,6.24;craft3d_preview;"
-		.. "crafting3d_grid.obj;" .. atlas_tex
-		.. ";20,-30;false;true]"
+	if active_layer >= 1 and active_layer <= 3 then
+		-- Single layer: large 3x3 grid
+		local box_size = 1.8
+		local gap = 0.15
+		-- Center the 3x3 grid in the preview area (8.4 to 16.2)
+		local preview_cx = 8.4 + 7.8 / 2  -- 12.3
+		local grid_w = 3 * box_size + 2 * gap  -- 5.7
+		local grid_x = preview_cx - grid_w / 2
+		local grid_y = 2.4  -- below header label
+
+		fs = fs .. "label[" .. (preview_cx - 1.5) .. ",1.56;"
+			.. minetest.colorize("#00ccaa", "Layer " .. active_layer) .. "]"
+
+		for row = 1, 3 do
+			for col = 1, 3 do
+				local idx = (row - 1) * 3 + col
+				local stack = inv:get_stack("layer" .. active_layer, idx)
+				local color = stack:is_empty() and "#1a1a22" or "#00ccaa"
+				local bx = grid_x + (col - 1) * (box_size + gap)
+				local by = grid_y + (row - 1) * (box_size + gap)
+				fs = fs .. "box[" .. bx .. "," .. by .. ";"
+					.. box_size .. "," .. box_size .. ";" .. color .. "]"
+			end
+		end
+	else
+		-- "All" view: 3 grids side by side
+		fs = add_all_layers_preview(fs, pos)
+	end
+
 	return fs
 end
 
@@ -159,9 +199,11 @@ end
 build_crafting3d_formspec = function(pos)
 	local meta = minetest.get_meta(pos)
 	local layer = meta:get_int("active_layer")
-	if layer < 1 or layer > 3 then layer = 1 end
+	if layer < 1 or layer > 4 then layer = 1 end
 
-	local inv_name = "layer" .. layer
+	local inv_layer = layer
+	if layer == 4 then inv_layer = 1 end  -- default to layer 1 for editing
+	local inv_name = "layer" .. inv_layer
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
@@ -186,9 +228,23 @@ build_crafting3d_formspec = function(pos)
 		end
 	end
 
+	-- "All" button at position 4
+	if layer == 4 then
+		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
+			"layer_4", "All", "#00ccaa", "#00ddbb", "#009988")
+	else
+		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
+			"layer_4", "All", "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
+	end
+
 	-- Layer label
-	fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
-		"Editing Layer " .. layer .. " (Y=" .. layer .. ")") .. "]"
+	if layer == 4 then
+		fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
+			"Viewing All Layers") .. "]"
+	else
+		fs = fs .. "label[0.6,3.0;" .. minetest.colorize("#aaaaaa",
+			"Editing Layer " .. layer .. " (Y=" .. layer .. ")") .. "]"
+	end
 
 	-- 3x3 crafting grid for the active layer (nodemeta for named formspec)
 	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.6,3.36;3.6,3.6;]"
@@ -209,11 +265,11 @@ build_crafting3d_formspec = function(pos)
 		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
 
-	-- 3D cube preview (right side)
+	-- Grid preview (right side)
 	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
 	fs = fs .. "label[9.6,1.32;" .. minetest.colorize("#aaaaaa",
-		"Layer Preview \xe2\x80\x94 click & drag to rotate") .. "]"
-	fs = add_cube_preview(fs, pos, layer)
+		"Grid Preview") .. "]"
+	fs = add_box_preview(fs, pos, layer)
 
 	return fs
 end
@@ -292,7 +348,7 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 	local node = minetest.get_node(pos)
 	if node.name ~= "lazarus_space:crafting_station_3d" then return end
 
-	for i = 1, 3 do
+	for i = 1, 4 do
 		if fields["layer_" .. i] then
 			local meta = minetest.get_meta(pos)
 			meta:set_int("active_layer", i)
