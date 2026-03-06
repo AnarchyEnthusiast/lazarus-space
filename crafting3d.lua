@@ -83,24 +83,7 @@ end
 -- 3D MODEL PREVIEW
 -- ============================================================
 
-local function get_item_texture(item_name)
-	local def = minetest.registered_items[item_name]
-	if not def then return "lazarus_space_grid_filled.png" end
-	if def.inventory_image and def.inventory_image ~= "" then
-		return def.inventory_image
-	end
-	if def.wield_image and def.wield_image ~= "" then
-		return def.wield_image
-	end
-	if def.tiles and def.tiles[1] then
-		local tex = def.tiles[1]
-		if type(tex) == "table" then tex = tex.name or "" end
-		if tex ~= "" then return tex end
-	end
-	return "lazarus_space_grid_filled.png"
-end
-
--- Per-layer texture: 9 tiles in a 144x16 atlas
+-- Per-layer texture: 9 tiles in a 144x16 atlas (empty/filled status only)
 local function build_layer_texture(pos, layer_num)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
@@ -111,14 +94,14 @@ local function build_layer_texture(pos, layer_num)
 		if stack:is_empty() then
 			tile = "lazarus_space_grid_active.png"
 		else
-			tile = get_item_texture(stack:get_name())
+			tile = "lazarus_space_grid_filled.png"
 		end
 		tex = tex .. ":" .. (i * 16) .. "\\,0=" .. tile
 	end
 	return tex
 end
 
--- Full cube texture: 27 tiles in a 432x16 atlas
+-- Full cube texture: 27 tiles in a 432x16 atlas (empty/filled status only)
 local function build_full_texture(pos, active_layer)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
@@ -135,7 +118,7 @@ local function build_full_texture(pos, active_layer)
 					tile = "lazarus_space_grid_empty.png"
 				end
 			else
-				tile = get_item_texture(stack:get_name())
+				tile = "lazarus_space_grid_filled.png"
 			end
 			tex = tex .. ":" .. (slot * 16) .. "\\,0=" .. tile
 			slot = slot + 1
@@ -163,6 +146,39 @@ local function add_cube_preview(fs, pos, active_layer)
 	fs = fs .. "model[8.76,1.8;7.08,6.24;craft3d_preview;"
 		.. mesh .. ";" .. atlas_tex
 		.. ";20,-30;false;true]"
+
+	-- Overlay wield item images on filled slots (per-layer only)
+	if active_layer >= 1 and active_layer <= 3 then
+		local meta = minetest.get_meta(pos)
+		local inv = meta:get_inventory()
+		-- Model viewport: x=8.76, y=1.8, w=7.08, h=6.24
+		local img_size = 1.2
+		local mx = 8.76
+		local my = 1.8
+		local mw = 7.08
+		local mh = 6.24
+		-- Grid center in viewport
+		local cx = mx + mw / 2
+		local cy = my + mh / 2
+		-- Spacing between slots in screen coords (approximate for 20,-30 rotation)
+		local sx = 1.6
+		local sy = 1.4
+
+		for row = 1, 3 do
+			for col = 1, 3 do
+				local idx = (row - 1) * 3 + col
+				local stack = inv:get_stack("layer" .. active_layer, idx)
+				if not stack:is_empty() then
+					local ix = cx + (col - 2) * sx - img_size / 2
+					local iy = cy + (row - 2) * sy - img_size / 2
+					fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
+						.. img_size .. "," .. img_size .. ";"
+						.. stack:get_name() .. "]"
+				end
+			end
+		end
+	end
+
 	return fs
 end
 
