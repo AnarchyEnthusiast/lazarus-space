@@ -95,10 +95,11 @@ local function page_header(fs, title)
 end
 
 -- ============================================================
--- 3D MODEL HELPER — multi-material approach
+-- 3D MODEL HELPER — single material, [combine atlas with escaped commas
 -- ============================================================
--- Each .obj declares 5 materials in fixed order. The model[] element
--- maps comma-separated textures to material groups by index.
+-- All .obj files use a single material with UV coords pointing to slots
+-- in an 80x16 atlas. The atlas is built at runtime via [combine with \,
+-- so formspec parsing doesn't split on the coordinate commas.
 
 local PAGE_MODELS = {
 	[2] = "reactor_layer_floor.obj",
@@ -108,12 +109,13 @@ local PAGE_MODELS = {
 	[6] = "reactor_complete.obj",
 }
 
--- 5 textures in material order (must match MATERIAL_ORDER in generate_models.py)
-local MODEL_TEXTURE = "lazarus_space_pole_field.png"
-	.. ",lazarus_space_toroid_field.png"
-	.. ",default_steel_block.png"
-	.. ",lazarus_space_plasma_field.png"
-	.. ",lazarus_space_pole_corrector.png"
+-- Runtime [combine atlas — \, escapes commas for the formspec parser
+local MODEL_TEXTURE = "[combine:80x16"
+	.. ":0\\,0=lazarus_space_pole_field.png"
+	.. ":16\\,0=lazarus_space_toroid_field.png"
+	.. ":32\\,0=default_steel_block.png"
+	.. ":48\\,0=lazarus_space_plasma_field.png"
+	.. ":64\\,0=lazarus_space_pole_corrector.png"
 
 local function add_model(fs, page, x, y, w, h, rot_x, rot_y)
 	local mesh = PAGE_MODELS[page]
