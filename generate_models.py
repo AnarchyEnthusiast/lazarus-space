@@ -411,123 +411,138 @@ def generate_obj(name, layer_grids):
     print(f"Generated {name}.obj ({len(vertices)} vertices, {len(faces)} faces)")
 
 
-def generate_crafting3d_grid():
-    """Generate a flat 3x3 grid .obj with single-material atlas UV approach.
-
-    9 cubes in a 3x3 arrangement (one layer). Uses a 144x16 atlas (9 slots
-    of 16x16). UV coordinates map each cube's faces to its slot in the atlas.
-    """
+def generate_crafting3d_layer():
+    """9 cubes in a flat 3x3 grid with integer coords matching reactor models."""
     NUM_CUBES = 9
-    lines = []
-    lines.append("# Crafting 3D grid — single layer, atlas UV approach")
-    lines.append("# UV coords select tile in 144x16 atlas")
-    lines.append("")
+    lines = ["# Crafting 3D layer — integer coords, single-material atlas UV", ""]
+
+    cube = 2
+    gap = 1
+    step = cube + gap  # 3
 
     vert_offset = 1
     uv_offset = 1
-    cube_size = 0.7
-    gap = 0.1
-    step = cube_size + gap  # 0.8
-
-    # Center the grid around origin
-    total_span = 3 * cube_size + 2 * gap  # 2.3
-    origin = -total_span / 2
-
     vertices = []
     uvs = []
     faces = []
 
     slot = 0
-    for row in range(1, 4):
-        for col in range(1, 4):
-            # Position: col→x, row→z, flat on y=0
-            x0 = origin + (col - 1) * step
-            y0 = 0
-            z0 = origin + (row - 1) * step
-            x1 = x0 + cube_size
-            y1 = cube_size
-            z1 = z0 + cube_size
+    for row in range(3):
+        for col in range(3):
+            x0 = -4 + col * step
+            y0 = -1
+            z0 = -4 + row * step
+            x1 = x0 + cube
+            y1 = y0 + cube
+            z1 = z0 + cube
 
-            # 8 corner vertices
-            corners = [
-                (x0, y0, z0),  # 0
-                (x1, y0, z0),  # 1
-                (x1, y1, z0),  # 2
-                (x0, y1, z0),  # 3
-                (x0, y0, z1),  # 4
-                (x1, y0, z1),  # 5
-                (x1, y1, z1),  # 6
-                (x0, y1, z1),  # 7
-            ]
-            vertices.extend(corners)
+            vertices.extend([
+                (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+                (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),
+            ])
 
-            # UV coordinates for this cube's atlas slot
-            u_min = slot / NUM_CUBES
-            u_max = (slot + 1) / NUM_CUBES
-            uvs.append((u_min, 0.0))
-            uvs.append((u_max, 0.0))
-            uvs.append((u_max, 1.0))
-            uvs.append((u_min, 1.0))
+            u0 = slot / NUM_CUBES
+            u1 = (slot + 1) / NUM_CUBES
+            uvs.extend([(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)])
 
-            # 6 faces
-            face_defs = [
-                (0, 1, 2, 3, 1),   # front  (-z)
-                (5, 4, 7, 6, 2),   # back   (+z)
-                (3, 2, 6, 7, 3),   # top    (+y)
-                (4, 5, 1, 0, 4),   # bottom (-y)
-                (1, 5, 6, 2, 5),   # right  (+x)
-                (4, 0, 3, 7, 6),   # left   (-x)
-            ]
-            for vi0, vi1, vi2, vi3, ni in face_defs:
+            for ni, (a, b, c, d) in enumerate([
+                (0, 1, 2, 3), (5, 4, 7, 6), (3, 2, 6, 7),
+                (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7),
+            ], 1):
                 faces.append((
-                    vert_offset + vi0,
-                    vert_offset + vi1,
-                    vert_offset + vi2,
-                    vert_offset + vi3,
-                    uv_offset + 0,
-                    uv_offset + 1,
-                    uv_offset + 2,
-                    uv_offset + 3,
-                    ni,
+                    vert_offset + a, vert_offset + b, vert_offset + c, vert_offset + d,
+                    uv_offset, uv_offset + 1, uv_offset + 2, uv_offset + 3, ni,
                 ))
 
             vert_offset += 8
             uv_offset += 4
             slot += 1
 
-    # Write .obj file
-    for vx, vy, vz in vertices:
-        lines.append(f"v {vx:.4f} {vy:.4f} {vz:.4f}")
+    # Write vertices as INTEGERS
+    for x, y, z in vertices:
+        lines.append(f"v {int(x)} {int(y)} {int(z)}")
     lines.append("")
-
     for u, v in uvs:
         lines.append(f"vt {u:.6f} {v:.6f}")
     lines.append("")
-
-    # Normals (6 directions)
-    lines.append("vn  0  0 -1")
-    lines.append("vn  0  0  1")
-    lines.append("vn  0  1  0")
-    lines.append("vn  0 -1  0")
-    lines.append("vn  1  0  0")
-    lines.append("vn -1  0  0")
+    for n in ["vn 0 0 -1", "vn 0 0 1", "vn 0 1 0", "vn 0 -1 0", "vn 1 0 0", "vn -1 0 0"]:
+        lines.append(n)
     lines.append("")
-
-    # All faces under a single material
     lines.append("usemtl crafting_atlas")
     for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
-        lines.append(
-            f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}"
-        )
+        lines.append(f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}")
+
+    path = os.path.join(MODELS_DIR, "crafting3d_layer.obj")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Generated crafting3d_layer.obj (9 cubes, integer coords)")
+
+
+def generate_crafting3d_full():
+    """27 cubes in a 3x3x3 grid with integer coords matching reactor models."""
+    NUM_CUBES = 27
+    lines = ["# Crafting 3D full — integer coords, single-material atlas UV", ""]
+
+    cube = 2
+    gap = 1
+    step = cube + gap  # 3
+
+    vert_offset = 1
+    uv_offset = 1
+    vertices = []
+    uvs = []
+    faces = []
+
+    slot = 0
+    for layer in range(3):
+        for row in range(3):
+            for col in range(3):
+                x0 = -4 + col * step
+                y0 = -4 + layer * step
+                z0 = -4 + row * step
+                x1 = x0 + cube
+                y1 = y0 + cube
+                z1 = z0 + cube
+
+                vertices.extend([
+                    (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+                    (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),
+                ])
+
+                u0 = slot / NUM_CUBES
+                u1 = (slot + 1) / NUM_CUBES
+                uvs.extend([(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)])
+
+                for ni, (a, b, c, d) in enumerate([
+                    (0, 1, 2, 3), (5, 4, 7, 6), (3, 2, 6, 7),
+                    (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7),
+                ], 1):
+                    faces.append((
+                        vert_offset + a, vert_offset + b, vert_offset + c, vert_offset + d,
+                        uv_offset, uv_offset + 1, uv_offset + 2, uv_offset + 3, ni,
+                    ))
+
+                vert_offset += 8
+                uv_offset += 4
+                slot += 1
+
+    for x, y, z in vertices:
+        lines.append(f"v {int(x)} {int(y)} {int(z)}")
     lines.append("")
+    for u, v in uvs:
+        lines.append(f"vt {u:.6f} {v:.6f}")
+    lines.append("")
+    for n in ["vn 0 0 -1", "vn 0 0 1", "vn 0 1 0", "vn 0 -1 0", "vn 1 0 0", "vn -1 0 0"]:
+        lines.append(n)
+    lines.append("")
+    lines.append("usemtl crafting_atlas")
+    for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
+        lines.append(f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}")
 
-    obj_path = os.path.join(MODELS_DIR, "crafting3d_grid.obj")
-    with open(obj_path, "w") as f:
-        f.write("\n".join(lines))
-
-    total_verts = 9 * 8
-    total_faces = 9 * 6
-    print(f"Generated crafting3d_grid.obj ({total_verts} vertices, {total_faces} faces, 1 material)")
+    path = os.path.join(MODELS_DIR, "crafting3d_full.obj")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Generated crafting3d_full.obj (27 cubes, integer coords)")
 
 
 def main():
@@ -556,8 +571,9 @@ def main():
     for name, layer_grids in LAYERS.items():
         generate_obj(name, layer_grids)
 
-    # Generate 3D crafting grid model
-    generate_crafting3d_grid()
+    # Generate 3D crafting grid models
+    generate_crafting3d_layer()
+    generate_crafting3d_full()
 
     print(f"\nAll models saved to {MODELS_DIR}")
     print("Lua texture: [combine:80x16 with escaped commas (see guide.lua)")
