@@ -213,8 +213,8 @@ local function build_portal_guide_page(page)
 		.. "no_prepend[]"
 
 	-- Dispatch
-	if page == 1 then     fs = build_page_overview(fs)
-	elseif page == 2 then fs = build_page_setup(fs)
+	if page == 1 then     fs = build_page_setup(fs)
+	elseif page == 2 then fs = build_page_overview(fs)
 	elseif page == 3 then fs = build_page_portal(fs)
 	elseif page == 4 then fs = build_page_safety(fs)
 	end
