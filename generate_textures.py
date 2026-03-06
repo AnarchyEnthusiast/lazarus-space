@@ -776,26 +776,6 @@ def generate_grid_filled():
     return img
 
 
-def generate_crafting3d_atlas():
-    """144x16 base atlas for crafting 3D preview — 9 tiles of 'active empty' style.
-
-    Each tile is 16x16: dark fill (#0a1a18) with teal border (#00ccaa).
-    At runtime, filled slots are overlaid with ^[fill solid color.
-    """
-    img = Image.new("RGBA", (144, 16))
-    for slot in range(9):
-        ox = slot * 16
-        for y in range(16):
-            for x in range(16):
-                px = ox + x
-                if x == 0 or x == 15 or y == 0 or y == 15:
-                    # Bright teal border
-                    img.putpixel((px, y), (0x00, 0xcc, 0xaa, 255))
-                else:
-                    # Dark fill with slight teal tint
-                    img.putpixel((px, y), (0x0a, 0x1a, 0x18, 255))
-    return img
-
 
 def generate_crafting_station_3d():
     """16x16 dark metallic block with teal grid pattern for the crafting station."""
@@ -991,7 +971,6 @@ def main():
         "lazarus_space_grid_empty.png": generate_grid_empty(),
         "lazarus_space_grid_active.png": generate_grid_active(),
         "lazarus_space_grid_filled.png": generate_grid_filled(),
-        "lazarus_space_crafting3d_atlas.png": generate_crafting3d_atlas(),
         "lazarus_space_crafting_station_3d.png": generate_crafting_station_3d(),
     }
 

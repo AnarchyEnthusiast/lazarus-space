@@ -1,16 +1,16 @@
--- Lazarus Space: Dimensional Crafting Station (3x3x3 Cube)
--- 27-slot crafting grid across 3 layers with per-layer 3D preview.
+-- Lazarus Space: Dimensional Crafting Station (6×6 Grid)
+-- 36-slot crafting grid for advanced recipes.
 
 -- ============================================================
--- REGISTERED 3D RECIPES
+-- REGISTERED 6×6 RECIPES
 -- ============================================================
 
-local recipes_3d = {}
+local recipes_6x6 = {}
 
-lazarus_space.register_3d_craft = function(def)
-	recipes_3d[#recipes_3d + 1] = {
+lazarus_space.register_6x6_craft = function(def)
+	recipes_6x6[#recipes_6x6 + 1] = {
 		output = def.output,
-		recipe = def.recipe,
+		recipe = def.recipe,  -- flat table of 36 strings (6 rows × 6 cols)
 	}
 end
 
@@ -33,26 +33,13 @@ local function item_matches(pattern, item_name)
 	return pattern == item_name
 end
 
-lazarus_space.find_3d_craft = function(grid)
-	for _, recipe in ipairs(recipes_3d) do
+lazarus_space.find_6x6_craft = function(grid)
+	for _, recipe in ipairs(recipes_6x6) do
 		local match = true
-		for layer = 1, 3 do
-			if not match then break end
-			local r = recipe.recipe[layer]
-			if not r then
-				for i = 1, 9 do
-					if grid[layer][i] ~= "" then
-						match = false
-						break
-					end
-				end
-			else
-				for i = 1, 9 do
-					if not item_matches(r[i] or "", grid[layer][i]) then
-						match = false
-						break
-					end
-				end
+		for i = 1, 36 do
+			if not item_matches(recipe.recipe[i] or "", grid[i]) then
+				match = false
+				break
 			end
 		end
 		if match then
@@ -63,128 +50,23 @@ lazarus_space.find_3d_craft = function(grid)
 end
 
 -- ============================================================
--- STYLED BUTTON HELPER (local copy)
--- ============================================================
-
-local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, text)
-	text = text or "#ffffff"
-	bg_hover = bg_hover or bg
-	bg_press = bg_press or bg
-	fs = fs .. "style[" .. name .. ";bgcolor=" .. bg
-		.. ";bgcolor_hovered=" .. bg_hover
-		.. ";bgcolor_pressed=" .. bg_press
-		.. ";textcolor=" .. text .. "]"
-	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h
-		.. ";" .. name .. ";" .. label .. "]"
-	return fs
-end
-
--- ============================================================
--- 3D PREVIEW
--- ============================================================
-
-local function add_cube_preview(fs, pos, active_layer)
-	local mesh
-	local label
-
-	if active_layer >= 1 and active_layer <= 3 then
-		mesh = "crafting3d_layer.obj"
-		label = "Layer " .. active_layer
-	else
-		mesh = "crafting3d_full.obj"
-		label = "All Layers"
-	end
-
-	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa", label) .. "]"
-
-	-- Single wireframe texture for all cubes — item_image[] overlays show items
-	local model_name = "craft3d_" .. os.time() .. "_" .. math.random(10000)
-	fs = fs .. "model[8.64,1.8;7.32,6.36;" .. model_name .. ";"
-		.. mesh .. ";lazarus_space_grid_active.png"
-		.. ";20,-30;false;true]"
-
-	-- Overlay item_image[] on filled slots
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-	local img_size = 1.2
-	local cx = 8.64 + 7.32 / 2
-	local cy = 1.8 + 6.36 / 2
-	local sx_step = 1.6
-	local sy_step = 1.4
-
-	if active_layer >= 1 and active_layer <= 3 then
-		-- Per-layer: overlay items on the flat 3x3 grid
-		for row = 1, 3 do
-			for col = 1, 3 do
-				local idx = (row - 1) * 3 + col
-				local stack = inv:get_stack("layer" .. active_layer, idx)
-				if not stack:is_empty() then
-					local ix = cx + (col - 2) * sx_step - img_size / 2
-					local iy = cy + (row - 2) * sy_step - img_size / 2
-					fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
-						.. img_size .. "," .. img_size .. ";"
-						.. stack:get_name() .. "]"
-				end
-			end
-		end
-	end
-	-- No item overlays on "All" view — too cluttered at 27 positions
-
-	return fs
-end
-
--- ============================================================
--- LAYER GRID VIEWS
--- ============================================================
-
-local function add_layer_grid(fs, pos, layer_num)
-	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
-	local inv_name = "layer" .. layer_num
-
-	-- Background panel (left side)
-	local panel_x = 0.3
-	local panel_y = 2.8
-	local panel_w = 7.6
-	local panel_h = 6.0
-	fs = fs .. "box[" .. panel_x .. "," .. panel_y .. ";"
-		.. panel_w .. "," .. panel_h .. ";#0a0a12]"
-
-	-- Layer label
-	fs = fs .. "label[" .. (panel_x + 0.3) .. "," .. (panel_y + 0.2)
-		.. ";" .. minetest.colorize("#00ccaa", "Layer " .. layer_num
-		.. " (Y=" .. layer_num .. ")") .. "]"
-
-	-- 3x3 inventory grid — no box[] backgrounds, list[] renders its own slots
-	local grid_x = panel_x + (panel_w - 3.9) / 2
-	local grid_y = panel_y + 0.8
-
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";"
-		.. grid_x .. "," .. grid_y .. ";3,3;]"
-
-	return fs
-end
-
--- ============================================================
 -- CRAFTING OUTPUT UPDATE
 -- ============================================================
 
-local function build_crafting3d_formspec(pos)  -- forward declaration
+local function build_crafting_formspec(pos)  -- forward declaration
 end
 
-local function update_3d_craft(pos)
+local function update_craft(pos)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
 
 	local grid = {}
-	for layer = 1, 3 do
-		grid[layer] = {}
-		for i = 1, 9 do
-			local stack = inv:get_stack("layer" .. layer, i)
-			grid[layer][i] = stack:get_name()
-		end
+	for i = 1, 36 do
+		local stack = inv:get_stack("craft", i)
+		grid[i] = stack:get_name()
 	end
 
-	local result = lazarus_space.find_3d_craft(grid)
+	local result = lazarus_space.find_6x6_craft(grid)
 	if result then
 		inv:set_stack("output", 1, result)
 	else
@@ -192,8 +74,8 @@ local function update_3d_craft(pos)
 	end
 
 	-- Refresh formspec for all nearby players viewing it
-	local fs = build_crafting3d_formspec(pos)
-	local formname = "lazarus_space:crafting3d_" .. minetest.pos_to_string(pos)
+	local fs = build_crafting_formspec(pos)
+	local formname = "lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos)
 	local players = minetest.get_connected_players()
 	for _, p in ipairs(players) do
 		if vector.distance(p:get_pos(), pos) < 8 then
@@ -206,65 +88,40 @@ end
 -- FORMSPEC BUILDER
 -- ============================================================
 
-build_crafting3d_formspec = function(pos)
-	local meta = minetest.get_meta(pos)
-	local layer = meta:get_int("active_layer")
-	if layer < 1 or layer > 4 then layer = 1 end
+build_crafting_formspec = function(pos)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
-		.. "size[16.8,15.5]"
+		.. "size[14.4,13.6]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
-	-- Title
-	fs = fs .. "box[0,0;16.8,0.96;#1a1a2e]"
-		.. "label[5.4,0.24;Dimensional Crafting Station]"
+	-- Title bar
+	fs = fs .. "box[0,0;14.4,0.8;#1a1a2e]"
+		.. "label[4.2,0.16;" .. minetest.colorize("#00ccaa",
+		"Dimensional Crafting Station") .. "]"
 
-	-- Layer selection buttons
-	fs = fs .. "label[0.6,1.44;Layer:]"
-	for i = 1, 3 do
-		local btn_name = "layer_" .. i
-		if i == layer then
-			fs = styled_btn(fs, 0.6 + (i - 1) * 1.56, 1.8, 1.32, 0.84,
-				btn_name, tostring(i), "#00ccaa", "#00ddbb", "#009988")
-		else
-			fs = styled_btn(fs, 0.6 + (i - 1) * 1.56, 1.8, 1.32, 0.84,
-				btn_name, tostring(i), "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
-		end
-	end
-	-- "All" button
-	if layer == 4 then
-		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
-			"layer_4", "All", "#00ccaa", "#00ddbb", "#009988")
-	else
-		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
-			"layer_4", "All", "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
-	end
+	-- Background panel for crafting area
+	fs = fs .. "box[0.3,1.2;8.4,8.0;#0a0a12]"
 
-	-- Left side: crafting grid (direct item placement)
-	local edit_layer = layer
-	if edit_layer == 4 then edit_layer = 1 end
-	fs = add_layer_grid(fs, pos, edit_layer)
+	-- 6×6 crafting grid
+	local grid_x = 0.6
+	local grid_y = 1.5
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";craft;"
+		.. grid_x .. "," .. grid_y .. ";6,6;]"
 
-	-- Right side: 3D preview
-	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
-	fs = fs .. "label[9.6,1.32;" .. minetest.colorize("#aaaaaa",
-		"3D Preview \xe2\x80\x94 click & drag to rotate") .. "]"
-	fs = add_cube_preview(fs, pos, layer)
+	-- Arrow
+	fs = fs .. "image[9.2,4.4;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
 
-	-- Arrow + output (between grid and preview)
-	fs = fs .. "image[4.68,4.64;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;6.24,4.64;1.2,1.2;]"
+	-- Output slot
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;10.8,4.4;1,1;]"
 
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0.6,10;8,1;]"
-		.. "list[current_player;main;0.6,11.25;8,3;8]"
+	fs = fs .. "list[current_player;main;0.6,9.8;8,1;]"
+		.. "list[current_player;main;0.6,11.05;8,3;8]"
 
 	-- Shift-click targets
-	local shift_layer = layer
-	if shift_layer == 4 then shift_layer = 1 end
-	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. shift_layer .. "]"
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";craft]"
 		.. "listring[current_player;main]"
 		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
@@ -286,38 +143,33 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		inv:set_size("layer1", 9)
-		inv:set_size("layer2", 9)
-		inv:set_size("layer3", 9)
+		inv:set_size("craft", 36)
 		inv:set_size("output", 1)
-		meta:set_int("active_layer", 1)
-		meta:set_string("formspec", "")  -- no node meta formspec, use named
+		meta:set_string("formspec", "")
 		meta:set_string("infotext", "Dimensional Crafting Station")
 	end,
 
 	on_rightclick = function(pos, node, clicker)
 		if not clicker:is_player() then return end
-		local fs = build_crafting3d_formspec(pos)
+		local fs = build_crafting_formspec(pos)
 		minetest.show_formspec(clicker:get_player_name(),
-			"lazarus_space:crafting3d_" .. minetest.pos_to_string(pos), fs)
+			"lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos), fs)
 	end,
 
-	on_metadata_inventory_move = function(pos) update_3d_craft(pos) end,
-	on_metadata_inventory_put = function(pos) update_3d_craft(pos) end,
+	on_metadata_inventory_move = function(pos) update_craft(pos) end,
+	on_metadata_inventory_put = function(pos) update_craft(pos) end,
 	on_metadata_inventory_take = function(pos, listname, index, stack, player)
 		if listname == "output" then
 			local inv = minetest.get_meta(pos):get_inventory()
-			for layer = 1, 3 do
-				for i = 1, 9 do
-					local s = inv:get_stack("layer" .. layer, i)
-					if not s:is_empty() then
-						s:take_item(1)
-						inv:set_stack("layer" .. layer, i, s)
-					end
+			for i = 1, 36 do
+				local s = inv:get_stack("craft", i)
+				if not s:is_empty() then
+					s:take_item(1)
+					inv:set_stack("craft", i, s)
 				end
 			end
 		end
-		update_3d_craft(pos)
+		update_craft(pos)
 	end,
 
 	allow_metadata_inventory_put = function(pos, listname, index, stack, player)
@@ -330,33 +182,6 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 		return count
 	end,
 })
-
--- ============================================================
--- LAYER SWITCHING HANDLER
--- ============================================================
-
-minetest.register_on_player_receive_fields(function(player, formname, fields)
-	-- Parse position from formname: "lazarus_space:crafting3d_(x,y,z)"
-	local pos_str = formname:match("^lazarus_space:crafting3d_(.+)$")
-	if not pos_str then return end
-	local pos = minetest.string_to_pos(pos_str)
-	if not pos then return end
-
-	-- Verify node still exists
-	local node = minetest.get_node(pos)
-	if node.name ~= "lazarus_space:crafting_station_3d" then return end
-
-	for i = 1, 4 do
-		if fields["layer_" .. i] then
-			local meta = minetest.get_meta(pos)
-			meta:set_int("active_layer", i)
-			-- Push updated formspec to the player
-			minetest.show_formspec(player:get_player_name(),
-				formname, build_crafting3d_formspec(pos))
-			return
-		end
-	end
-end)
 
 -- ============================================================
 -- CRAFTING RECIPE FOR THE STATION
@@ -372,52 +197,62 @@ minetest.register_craft({
 })
 
 -- ============================================================
--- 3D CRAFTING RECIPES
+-- 6×6 CRAFTING RECIPES
 -- ============================================================
 
--- Diamond pillar: 3 diamonds stacked vertically → diamond block
-lazarus_space.register_3d_craft({
+-- Diamond cross: 2×2 diamonds in center → diamond block
+lazarus_space.register_6x6_craft({
 	output = "default:diamondblock",
 	recipe = {
-		-- Layer 1 (bottom)
-		{"", "", "",  "", "default:diamond", "",  "", "", ""},
-		-- Layer 2 (middle)
-		{"", "", "",  "", "default:diamond", "",  "", "", ""},
-		-- Layer 3 (top)
-		{"", "", "",  "", "default:diamond", "",  "", "", ""},
+		-- Row 1
+		"", "", "", "", "", "",
+		-- Row 2
+		"", "", "", "", "", "",
+		-- Row 3
+		"", "", "default:diamond", "default:diamond", "", "",
+		-- Row 4
+		"", "", "default:diamond", "default:diamond", "", "",
+		-- Row 5
+		"", "", "", "", "", "",
+		-- Row 6
+		"", "", "", "", "", "",
 	},
 })
 
--- Steel cage: steel ingots forming cube frame → 2 steel blocks
-lazarus_space.register_3d_craft({
+-- Steel frame: steel ingots forming outer ring of 4×4 area → 2 steel blocks
+lazarus_space.register_6x6_craft({
 	output = "default:steelblock 2",
 	recipe = {
-		-- Layer 1 (bottom): full 3x3 ring
-		{"default:steel_ingot", "default:steel_ingot", "default:steel_ingot",
-		 "default:steel_ingot", "",                    "default:steel_ingot",
-		 "default:steel_ingot", "default:steel_ingot", "default:steel_ingot"},
-		-- Layer 2 (middle): 4 corners only
-		{"default:steel_ingot", "", "default:steel_ingot",
-		 "",                    "", "",
-		 "default:steel_ingot", "", "default:steel_ingot"},
-		-- Layer 3 (top): full 3x3 ring
-		{"default:steel_ingot", "default:steel_ingot", "default:steel_ingot",
-		 "default:steel_ingot", "",                    "default:steel_ingot",
-		 "default:steel_ingot", "default:steel_ingot", "default:steel_ingot"},
+		-- Row 1
+		"", "", "", "", "", "",
+		-- Row 2
+		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
+		-- Row 3
+		"", "default:steel_ingot", "",                    "",                    "default:steel_ingot", "",
+		-- Row 4
+		"", "default:steel_ingot", "",                    "",                    "default:steel_ingot", "",
+		-- Row 5
+		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
+		-- Row 6
+		"", "", "", "", "", "",
 	},
 })
 
--- Pole field from pole corrector core: corrector centered with 6 steel → 4 pole field
-lazarus_space.register_3d_craft({
+-- Pole field assembly: corrector in center with steel plus pattern → 4 pole field
+lazarus_space.register_6x6_craft({
 	output = "lazarus_space:pole_field 4",
 	recipe = {
-		-- Layer 1: steel in center
-		{"", "", "",  "", "default:steelblock", "",  "", "", ""},
-		-- Layer 2: steel cross around pole corrector
-		{"", "default:steelblock", "",
-		 "default:steelblock", "lazarus_space:pole_corrector", "default:steelblock",
-		 "", "default:steelblock", ""},
-		-- Layer 3: steel in center
-		{"", "", "",  "", "default:steelblock", "",  "", "", ""},
+		-- Row 1
+		"", "", "", "", "", "",
+		-- Row 2
+		"", "", "", "default:steelblock", "", "",
+		-- Row 3
+		"", "", "default:steelblock", "lazarus_space:pole_corrector", "default:steelblock", "",
+		-- Row 4
+		"", "", "", "default:steelblock", "", "",
+		-- Row 5
+		"", "", "", "", "", "",
+		-- Row 6
+		"", "", "", "", "", "",
 	},
 })
