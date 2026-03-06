@@ -40,7 +40,6 @@ lazarus_space.find_3d_craft = function(grid)
 			if not match then break end
 			local r = recipe.recipe[layer]
 			if not r then
-				-- Recipe has no layer defined; all slots must be empty
 				for i = 1, 9 do
 					if grid[layer][i] ~= "" then
 						match = false
@@ -81,47 +80,61 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
+-- ITEM TEXTURE HELPER
+-- ============================================================
+
+local function get_item_texture(item_name)
+	local def = minetest.registered_items[item_name]
+	if def then
+		local tex = def.inventory_image or ""
+		if tex == "" and def.tiles and def.tiles[1] then
+			tex = def.tiles[1]
+			if type(tex) == "table" then tex = tex.name or "" end
+		end
+		if tex ~= "" then return tex end
+	end
+	return "unknown_item.png"
+end
+
+-- ============================================================
+-- ATLAS TEXTURE BUILDER
+-- ============================================================
+
+local function build_atlas_texture(pos, active_layer)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
+	-- Build [combine texture with 27 slots (432x16 atlas)
+	local tex = "[combine:432x16"
+	local slot = 0
+	for layer = 1, 3 do
+		for row = 1, 3 do
+			for col = 1, 3 do
+				local idx = (row - 1) * 3 + col
+				local stack = inv:get_stack("layer" .. layer, idx)
+				local tile
+				if stack:is_empty() then
+					tile = (layer == active_layer)
+						and "lazarus_space_grid_active.png"
+						or "lazarus_space_grid_empty.png"
+				else
+					tile = get_item_texture(stack:get_name())
+				end
+				tex = tex .. ":" .. (slot * 16) .. "\\,0=" .. tile
+				slot = slot + 1
+			end
+		end
+	end
+	return tex
+end
+
+-- ============================================================
 -- 3D CUBE PREVIEW
 -- ============================================================
 
 local function add_cube_preview(fs, pos, active_layer)
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-	local textures = {}
-
-	for layer = 1, 3 do
-		local list_name = "layer" .. layer
-		for row = 1, 3 do
-			for col = 1, 3 do
-				local idx = (row - 1) * 3 + col
-				local stack = inv:get_stack(list_name, idx)
-				if stack:is_empty() then
-					if layer == active_layer then
-						textures[#textures + 1] = "lazarus_space_grid_active.png"
-					else
-						textures[#textures + 1] = "lazarus_space_grid_empty.png"
-					end
-				else
-					local item_name = stack:get_name()
-					local def = minetest.registered_items[item_name]
-					if def then
-						local tex = def.inventory_image or ""
-						if tex == "" and def.tiles and def.tiles[1] then
-							tex = def.tiles[1]
-							if type(tex) == "table" then tex = tex.name or "" end
-						end
-						textures[#textures + 1] = tex ~= "" and tex or "unknown_item.png"
-					else
-						textures[#textures + 1] = "unknown_item.png"
-					end
-				end
-			end
-		end
-	end
-
-	local tex_str = table.concat(textures, ",")
+	local atlas_tex = build_atlas_texture(pos, active_layer)
 	fs = fs .. "model[7.3,1.5;5.9,5.2;craft3d_preview;"
-		.. "crafting3d_grid.obj;" .. tex_str
+		.. "crafting3d_grid.obj;" .. atlas_tex
 		.. ";20,-30;false;true]"
 	return fs
 end
@@ -153,7 +166,15 @@ local function update_3d_craft(pos)
 		inv:set_stack("output", 1, "")
 	end
 
-	meta:set_string("formspec", build_crafting3d_formspec(pos))
+	-- Refresh formspec for all nearby players viewing it
+	local fs = build_crafting3d_formspec(pos)
+	local formname = "lazarus_space:crafting3d_" .. minetest.pos_to_string(pos)
+	local players = minetest.get_connected_players()
+	for _, p in ipairs(players) do
+		if vector.distance(p:get_pos(), pos) < 8 then
+			minetest.show_formspec(p:get_player_name(), formname, fs)
+		end
+	end
 end
 
 -- ============================================================
@@ -166,6 +187,7 @@ build_crafting3d_formspec = function(pos)
 	if layer < 1 or layer > 3 then layer = 1 end
 
 	local inv_name = "layer" .. layer
+	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
 		.. "size[14,10]"
@@ -193,21 +215,21 @@ build_crafting3d_formspec = function(pos)
 	fs = fs .. "label[0.5,2.5;" .. minetest.colorize("#aaaaaa",
 		"Editing Layer " .. layer .. " (Y=" .. layer .. ")") .. "]"
 
-	-- 3x3 crafting grid for the active layer
-	fs = fs .. "list[context;" .. inv_name .. ";0.5,2.8;3,3;]"
+	-- 3x3 crafting grid for the active layer (nodemeta for named formspec)
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";" .. inv_name .. ";0.5,2.8;3,3;]"
 
 	-- Arrow + output slot
 	fs = fs .. "image[3.9,3.8;1,1;gui_furnace_arrow_bg.png^[transformR270]"
-	fs = fs .. "list[context;output;5.2,3.6;1,1;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;5.2,3.6;1,1;]"
 
 	-- Player inventory
 	fs = fs .. "list[current_player;main;0.5,7.5;8,1;]"
 		.. "list[current_player;main;0.5,8.7;8,3;8]"
 
 	-- Shift-click targets
-	fs = fs .. "listring[context;" .. inv_name .. "]"
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";" .. inv_name .. "]"
 		.. "listring[current_player;main]"
-		.. "listring[context;output]"
+		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
 
 	-- 3D cube preview (right side)
@@ -238,13 +260,15 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 		inv:set_size("layer3", 9)
 		inv:set_size("output", 1)
 		meta:set_int("active_layer", 1)
-		meta:set_string("formspec", build_crafting3d_formspec(pos))
+		meta:set_string("formspec", "")  -- no node meta formspec, use named
 		meta:set_string("infotext", "Dimensional Crafting Station")
 	end,
 
 	on_rightclick = function(pos, node, clicker)
-		local meta = minetest.get_meta(pos)
-		meta:set_string("formspec", build_crafting3d_formspec(pos))
+		if not clicker:is_player() then return end
+		local fs = build_crafting3d_formspec(pos)
+		minetest.show_formspec(clicker:get_player_name(),
+			"lazarus_space:crafting3d_" .. minetest.pos_to_string(pos), fs)
 	end,
 
 	on_metadata_inventory_move = function(pos) update_3d_craft(pos) end,
@@ -281,34 +305,23 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 -- ============================================================
 
 minetest.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= "" then return end
-	-- Node formspec — check if any layer button was pressed
-	local dominated = false
-	for i = 1, 3 do
-		if fields["layer_" .. i] then
-			dominated = true
-			break
-		end
-	end
-	if not dominated then return end
+	-- Parse position from formname: "lazarus_space:crafting3d_(x,y,z)"
+	local pos_str = formname:match("^lazarus_space:crafting3d_(.+)$")
+	if not pos_str then return end
+	local pos = minetest.string_to_pos(pos_str)
+	if not pos then return end
 
-	-- Find the node the player is interacting with
-	local pos = nil
-	local inv = player:get_inventory()
-	-- Use player's current formspec interaction position
-	-- For node formspecs, we need to find the crafting station
-	local player_pos = player:get_pos()
-	-- Search nearby for the crafting station
-	local radius = 6
-	local found = minetest.find_node_near(player_pos, radius, {"lazarus_space:crafting_station_3d"})
-	if not found then return end
-	pos = found
+	-- Verify node still exists
+	local node = minetest.get_node(pos)
+	if node.name ~= "lazarus_space:crafting_station_3d" then return end
 
 	for i = 1, 3 do
 		if fields["layer_" .. i] then
 			local meta = minetest.get_meta(pos)
 			meta:set_int("active_layer", i)
-			meta:set_string("formspec", build_crafting3d_formspec(pos))
+			-- Push updated formspec to the player
+			minetest.show_formspec(player:get_player_name(),
+				formname, build_crafting3d_formspec(pos))
 			return
 		end
 	end

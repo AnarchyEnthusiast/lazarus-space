@@ -412,40 +412,49 @@ def generate_obj(name, layer_grids):
 
 
 def generate_crafting3d_grid():
-    """Generate a 3x3x3 wireframe grid .obj with 27 material groups.
+    """Generate a 3x3x3 grid .obj with single-material atlas UV approach.
 
-    Each of the 27 positions is a small cube (0.9 units) with 0.1 unit gaps.
-    Material groups are named slot_L{layer}_R{row}_C{col} where layer=1-3,
-    row=1-3, col=1-3. Order: layer 1 first (bottom), row-major within each layer.
+    Each of the 27 positions is a small cube (0.6 units) with 0.08 unit gaps.
+    Uses a 432x16 atlas (27 slots of 16x16). UV coordinates map each cube's
+    faces to its slot in the atlas. Single material avoids Irrlicht mesh buffer
+    merging issues.
+
+    Order: layer 1 first (bottom), row-major within each layer.
     """
+    NUM_CUBES = 27
     lines = []
-    lines.append("# Crafting 3D grid — 27 material groups for per-slot texturing")
+    lines.append("# Crafting 3D grid — single material, atlas UV approach")
+    lines.append("# UV coords select tile in [combine atlas built at runtime")
     lines.append("")
 
     vert_offset = 1
-    cube_size = 0.9
-    gap = 0.1
-    step = cube_size + gap  # 1.0
+    uv_offset = 1
+    cube_size = 0.6
+    gap = 0.08
+    step = cube_size + gap  # 0.68
 
     # Center the grid around origin
-    offset = -1.0  # so positions go from -1.0 to +1.0 (centers at -1, 0, 1)
+    total_span = 3 * cube_size + 2 * gap  # 2.04
+    origin = -total_span / 2  # -1.02
 
-    all_groups = []
+    vertices = []
+    uvs = []
+    faces = []  # (v1,v2,v3,v4, t1,t2,t3,t4, normal_idx)
 
+    slot = 0
     for layer in range(1, 4):
         for row in range(1, 4):
             for col in range(1, 4):
-                mat_name = f"slot_L{layer}_R{row}_C{col}"
                 # Position: col→x, layer→y, row→z
-                x0 = offset + (col - 1) * step
-                y0 = offset + (layer - 1) * step
-                z0 = offset + (row - 1) * step
+                x0 = origin + (col - 1) * step
+                y0 = origin + (layer - 1) * step
+                z0 = origin + (row - 1) * step
                 x1 = x0 + cube_size
                 y1 = y0 + cube_size
                 z1 = z0 + cube_size
 
-                # 8 vertices
-                verts = [
+                # 8 corner vertices
+                corners = [
                     (x0, y0, z0),  # 0
                     (x1, y0, z0),  # 1
                     (x1, y1, z0),  # 2
@@ -455,68 +464,67 @@ def generate_crafting3d_grid():
                     (x1, y1, z1),  # 6
                     (x0, y1, z1),  # 7
                 ]
+                vertices.extend(corners)
 
-                # UV coordinates (full texture per face)
-                uvs = [
-                    (0.0, 0.0),
-                    (1.0, 0.0),
-                    (1.0, 1.0),
-                    (0.0, 1.0),
+                # UV coordinates for this cube's atlas slot
+                u_min = slot / NUM_CUBES
+                u_max = (slot + 1) / NUM_CUBES
+                uvs.append((u_min, 0.0))
+                uvs.append((u_max, 0.0))
+                uvs.append((u_max, 1.0))
+                uvs.append((u_min, 1.0))
+
+                # 6 faces (all cubes visible, no face culling needed)
+                face_defs = [
+                    # (v0,v1,v2,v3, normal_index)
+                    (0, 1, 2, 3, 1),   # front  (-z)
+                    (5, 4, 7, 6, 2),   # back   (+z)
+                    (3, 2, 6, 7, 3),   # top    (+y)
+                    (4, 5, 1, 0, 4),   # bottom (-y)
+                    (1, 5, 6, 2, 5),   # right  (+x)
+                    (4, 0, 3, 7, 6),   # left   (-x)
                 ]
+                for vi0, vi1, vi2, vi3, ni in face_defs:
+                    faces.append((
+                        vert_offset + vi0,
+                        vert_offset + vi1,
+                        vert_offset + vi2,
+                        vert_offset + vi3,
+                        uv_offset + 0,
+                        uv_offset + 1,
+                        uv_offset + 2,
+                        uv_offset + 3,
+                        ni,
+                    ))
 
-                # 6 faces (quads): front, back, top, bottom, right, left
-                # Each face references 4 vertices and 4 UVs
-                faces = [
-                    # front (-z): v0,v1,v2,v3
-                    (0, 1, 2, 3, 1),
-                    # back (+z): v5,v4,v7,v6
-                    (5, 4, 7, 6, 2),
-                    # top (+y): v3,v2,v6,v7
-                    (3, 2, 6, 7, 3),
-                    # bottom (-y): v4,v5,v1,v0
-                    (4, 5, 1, 0, 4),
-                    # right (+x): v1,v5,v6,v2
-                    (1, 5, 6, 2, 5),
-                    # left (-x): v4,v0,v3,v7
-                    (4, 0, 3, 7, 6),
-                ]
-
-                all_groups.append((mat_name, verts, uvs, faces, vert_offset))
                 vert_offset += 8
+                uv_offset += 4
+                slot += 1
 
-    # Write all vertices
-    for mat_name, verts, uvs, faces, vo in all_groups:
-        for vx, vy, vz in verts:
-            lines.append(f"v {vx:.4f} {vy:.4f} {vz:.4f}")
+    # Write .obj file
+    for vx, vy, vz in vertices:
+        lines.append(f"v {vx:.4f} {vy:.4f} {vz:.4f}")
     lines.append("")
 
-    # Write UV coordinates (same 4 UVs reused per cube)
-    uv_offset = 1
-    for mat_name, verts, uvs, faces, vo in all_groups:
-        for u, v in uvs:
-            lines.append(f"vt {u:.4f} {v:.4f}")
+    for u, v in uvs:
+        lines.append(f"vt {u:.6f} {v:.6f}")
     lines.append("")
 
-    # Write normals (6 directions, shared)
-    lines.append("vn  0  0 -1")  # 1: front
-    lines.append("vn  0  0  1")  # 2: back
-    lines.append("vn  0  1  0")  # 3: top
-    lines.append("vn  0 -1  0")  # 4: bottom
-    lines.append("vn  1  0  0")  # 5: right
-    lines.append("vn -1  0  0")  # 6: left
+    # Normals (6 directions)
+    lines.append("vn  0  0 -1")
+    lines.append("vn  0  0  1")
+    lines.append("vn  0  1  0")
+    lines.append("vn  0 -1  0")
+    lines.append("vn  1  0  0")
+    lines.append("vn -1  0  0")
     lines.append("")
 
-    # Write faces grouped by material
-    uv_idx = 1
-    for mat_name, verts, uvs, faces, vo in all_groups:
-        lines.append(f"usemtl {mat_name}")
-        for v0, v1, v2, v3, ni in faces:
-            t1, t2, t3, t4 = uv_idx, uv_idx + 1, uv_idx + 2, uv_idx + 3
-            lines.append(
-                f"f {vo+v0}/{t1}/{ni} {vo+v1}/{t2}/{ni} "
-                f"{vo+v2}/{t3}/{ni} {vo+v3}/{t4}/{ni}"
-            )
-        uv_idx += 4
+    # All faces under a single material
+    lines.append("usemtl crafting_atlas")
+    for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
+        lines.append(
+            f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}"
+        )
     lines.append("")
 
     obj_path = os.path.join(MODELS_DIR, "crafting3d_grid.obj")
@@ -525,7 +533,7 @@ def generate_crafting3d_grid():
 
     total_verts = 27 * 8
     total_faces = 27 * 6
-    print(f"Generated crafting3d_grid.obj ({total_verts} vertices, {total_faces} faces, 27 materials)")
+    print(f"Generated crafting3d_grid.obj ({total_verts} vertices, {total_faces} faces, 1 material)")
 
 
 def main():
