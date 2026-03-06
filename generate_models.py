@@ -412,137 +412,116 @@ def generate_obj(name, layer_grids):
 
 
 def generate_crafting3d_layer():
-    """9 cubes in a flat 3x3 grid with integer coords matching reactor models."""
-    NUM_CUBES = 9
-    lines = ["# Crafting 3D layer — integer coords, single-material atlas UV", ""]
+    """9 cubes in flat 3x3 grid. Per-cube materials for separate textures."""
+    lines = ["# Crafting 3D layer — per-cube materials, integer coords", ""]
 
     cube = 2
     gap = 1
     step = cube + gap  # 3
 
-    vert_offset = 1
-    uv_offset = 1
+    # Emit all vertices (9 cubes x 8 corners = 72 vertices)
     vertices = []
-    uvs = []
-    faces = []
-
-    slot = 0
     for row in range(3):
         for col in range(3):
             x0 = -4 + col * step
             y0 = -1
             z0 = -4 + row * step
-            x1 = x0 + cube
-            y1 = y0 + cube
-            z1 = z0 + cube
-
+            x1, y1, z1 = x0 + cube, y0 + cube, z0 + cube
             vertices.extend([
                 (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
                 (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),
             ])
 
-            u0 = slot / NUM_CUBES
-            u1 = (slot + 1) / NUM_CUBES
-            uvs.extend([(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)])
-
-            for ni, (a, b, c, d) in enumerate([
-                (0, 1, 2, 3), (5, 4, 7, 6), (3, 2, 6, 7),
-                (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7),
-            ], 1):
-                faces.append((
-                    vert_offset + a, vert_offset + b, vert_offset + c, vert_offset + d,
-                    uv_offset, uv_offset + 1, uv_offset + 2, uv_offset + 3, ni,
-                ))
-
-            vert_offset += 8
-            uv_offset += 4
-            slot += 1
-
-    # Write vertices as INTEGERS
     for x, y, z in vertices:
         lines.append(f"v {int(x)} {int(y)} {int(z)}")
     lines.append("")
-    for u, v in uvs:
-        lines.append(f"vt {u:.6f} {v:.6f}")
+
+    # 4 shared UV coords — full face coverage (each material gets its own texture)
+    lines.append("vt 0 0")
+    lines.append("vt 1 0")
+    lines.append("vt 1 1")
+    lines.append("vt 0 1")
     lines.append("")
+
+    # 6 normals
     for n in ["vn 0 0 -1", "vn 0 0 1", "vn 0 1 0", "vn 0 -1 0", "vn 1 0 0", "vn -1 0 0"]:
         lines.append(n)
     lines.append("")
-    lines.append("usemtl crafting_atlas")
-    for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
-        lines.append(f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}")
+
+    # Face definitions: (vertex offsets within cube, normal index)
+    face_defs = [
+        ((0, 1, 2, 3), 1),   # front (-z)
+        ((5, 4, 7, 6), 2),   # back (+z)
+        ((3, 2, 6, 7), 3),   # top (+y)
+        ((4, 5, 1, 0), 4),   # bottom (-y)
+        ((1, 5, 6, 2), 5),   # right (+x)
+        ((4, 0, 3, 7), 6),   # left (-x)
+    ]
+
+    for slot in range(9):
+        lines.append(f"usemtl slot_{slot}")
+        vo = slot * 8 + 1  # 1-indexed vertex offset
+        for (a, b, c, d), ni in face_defs:
+            lines.append(f"f {vo+a}/1/{ni} {vo+b}/2/{ni} {vo+c}/3/{ni} {vo+d}/4/{ni}")
+        lines.append("")
 
     path = os.path.join(MODELS_DIR, "crafting3d_layer.obj")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"Generated crafting3d_layer.obj (9 cubes, integer coords)")
+    print("Generated crafting3d_layer.obj (9 cubes, per-cube materials)")
 
 
 def generate_crafting3d_full():
-    """27 cubes in a 3x3x3 grid with integer coords matching reactor models."""
-    NUM_CUBES = 27
-    lines = ["# Crafting 3D full — integer coords, single-material atlas UV", ""]
+    """27 cubes in 3x3x3 grid. Per-cube materials for separate textures."""
+    lines = ["# Crafting 3D full — per-cube materials, integer coords", ""]
 
     cube = 2
     gap = 1
-    step = cube + gap  # 3
+    step = cube + gap
 
-    vert_offset = 1
-    uv_offset = 1
     vertices = []
-    uvs = []
-    faces = []
-
-    slot = 0
     for layer in range(3):
         for row in range(3):
             for col in range(3):
                 x0 = -4 + col * step
                 y0 = -4 + layer * step
                 z0 = -4 + row * step
-                x1 = x0 + cube
-                y1 = y0 + cube
-                z1 = z0 + cube
-
+                x1, y1, z1 = x0 + cube, y0 + cube, z0 + cube
                 vertices.extend([
                     (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
                     (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),
                 ])
 
-                u0 = slot / NUM_CUBES
-                u1 = (slot + 1) / NUM_CUBES
-                uvs.extend([(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)])
-
-                for ni, (a, b, c, d) in enumerate([
-                    (0, 1, 2, 3), (5, 4, 7, 6), (3, 2, 6, 7),
-                    (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7),
-                ], 1):
-                    faces.append((
-                        vert_offset + a, vert_offset + b, vert_offset + c, vert_offset + d,
-                        uv_offset, uv_offset + 1, uv_offset + 2, uv_offset + 3, ni,
-                    ))
-
-                vert_offset += 8
-                uv_offset += 4
-                slot += 1
-
     for x, y, z in vertices:
         lines.append(f"v {int(x)} {int(y)} {int(z)}")
     lines.append("")
-    for u, v in uvs:
-        lines.append(f"vt {u:.6f} {v:.6f}")
+
+    lines.append("vt 0 0")
+    lines.append("vt 1 0")
+    lines.append("vt 1 1")
+    lines.append("vt 0 1")
     lines.append("")
+
     for n in ["vn 0 0 -1", "vn 0 0 1", "vn 0 1 0", "vn 0 -1 0", "vn 1 0 0", "vn -1 0 0"]:
         lines.append(n)
     lines.append("")
-    lines.append("usemtl crafting_atlas")
-    for v1, v2, v3, v4, t1, t2, t3, t4, ni in faces:
-        lines.append(f"f {v1}/{t1}/{ni} {v2}/{t2}/{ni} {v3}/{t3}/{ni} {v4}/{t4}/{ni}")
+
+    face_defs = [
+        ((0, 1, 2, 3), 1), ((5, 4, 7, 6), 2), ((3, 2, 6, 7), 3),
+        ((4, 5, 1, 0), 4), ((1, 5, 6, 2), 5), ((4, 0, 3, 7), 6),
+    ]
+
+    for slot in range(27):
+        lines.append(f"usemtl slot_{slot}")
+        vo = slot * 8 + 1
+        for (a, b, c, d), ni in face_defs:
+            lines.append(f"f {vo+a}/1/{ni} {vo+b}/2/{ni} {vo+c}/3/{ni} {vo+d}/4/{ni}")
+        lines.append("")
 
     path = os.path.join(MODELS_DIR, "crafting3d_full.obj")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"Generated crafting3d_full.obj (27 cubes, integer coords)")
+    print("Generated crafting3d_full.obj (27 cubes, per-cube materials)")
 
 
 def main():
