@@ -9,8 +9,8 @@ local FUEL_SLOTS = 6
 local FUEL_ITEM = "technic:uranium_fuel"
 local FUEL_DURATION = 8 * 60 * 60 -- 8 hours total for 6 rods
 local CHARGE_TIME = 5 -- 5-second countdown
-local POWER_OUTPUT = 140000 -- 140,000 EU
-local JUMPSTART_ENERGY = 50000 -- HV energy needed to jumpstart
+local POWER_OUTPUT = 240000 -- 240,000 EU
+local JUMPSTART_ENERGY = 85000 -- HV energy needed to jumpstart
 local STRUCTURE_CHECK_INTERVAL = 3 -- seconds between integrity checks
 
 -- ============================================================
