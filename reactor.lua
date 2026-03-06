@@ -324,7 +324,7 @@ local TIERS = {
 	},
 	{
 		name = "Tier 3",
-		power_output = 550000,
+		power_output = 600000,
 		jumpstart_energy = 200000,
 		fuel_slots = 12,
 		fuel_duration = 8 * 60 * 60,
@@ -634,16 +634,6 @@ local function build_reactor_formspec(pos)
 	end
 
 	if state == "active" then
-		-- Get output tier from power output block
-		local output_tier = "HV"
-		local po_pos = find_neighbor(pos, "lazarus_space:fusion_power_output")
-		if po_pos then
-			local po_meta = minetest.get_meta(po_pos)
-			local t = po_meta:get_string("output_tier")
-			if t ~= "" then output_tier = t end
-		end
-		fs = fs .. "label[0.3," .. (5.1 + fuel_offset) .. ";Output: " .. minetest.colorize("#00ccaa",
-			tier.power_output .. " EU") .. " (" .. output_tier .. ")]"
 		-- Fuel remaining with gradient drain bar
 		fs = fs .. "label[0.3," .. (5.8 + fuel_offset) .. ";Fuel Remaining: " .. format_time(fuel_time) .. "]"
 		local fuel_pct = math.floor(fuel_time / tier.fuel_duration * 100)
@@ -1372,11 +1362,9 @@ minetest.register_node("lazarus_space:fusion_power_output", {
 			.. "box[0,1;5.8,0.6;#0a0a15]"
 
 		if active then
-			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#00ff66", "ONLINE")
-				.. "  " .. power .. " EU]"
+			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#00ff66", "ONLINE") .. "]"
 		else
-			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "OFFLINE")
-				.. "  0 EU]"
+			fs = fs .. "label[0.3,1.1;" .. minetest.colorize("#ff3333", "OFFLINE") .. "]"
 		end
 
 		fs = fs .. "box[0,1.8;5.8,1.5;#0d0d1a]"

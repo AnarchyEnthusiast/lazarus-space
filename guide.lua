@@ -141,7 +141,7 @@ local TIER_INFO = {
 	},
 	{
 		name = "Tier 3", size = "17x17x5",
-		power = "550,000", rods = 12, jumpstart = "200,000",
+		power = "600,000", rods = 12, jumpstart = "200,000",
 		blocks = {pf = 152, tf = 160, sb = 177, plf = 44, pc = 1},
 	},
 }
@@ -209,11 +209,6 @@ local function build_tier_intro(fs, tab)
 	line("  " .. c(teal, "  1") .. "x  " .. c(white, "Fusion Control Panel"))
 	line("  " .. c(teal, "  1") .. "x  " .. c(white, "Plasma Jumpstarter"))
 	line("  " .. c(teal, "  1") .. "x  " .. c(white, "Fusion Power Output"))
-
-	y = y + 0.3
-	line(c(grey, "Pages 2-5: Layer-by-layer build guide"))
-	line(c(grey, "Page 6: Complete structure overview"))
-	line(c(grey, "Page 7: Control blocks & startup"))
 
 	return fs
 end
@@ -347,7 +342,7 @@ local function build_tier_model_page(fs, tab, page)
 end
 
 -- ============================================================
--- PAGE 7: CONTROL BLOCKS & STARTUP (shared across all tabs)
+-- PAGE 7: CONTROL BLOCKS & STARTUP (per-tier)
 -- ============================================================
 
 local GRID_CONTROL = {
@@ -358,7 +353,8 @@ local GRID_CONTROL = {
 	"...",
 }
 
-local function build_page_controls_and_startup(fs)
+local function build_page_controls_and_startup(fs, tab)
+	local tier = TIER_INFO[tab]
 	fs = page_header(fs, "Control Blocks & Startup Procedure")
 
 	local c = minetest.colorize
@@ -390,8 +386,6 @@ local function build_page_controls_and_startup(fs)
 	local ctx_x = (9 - 3 * ctx_step) / 2
 	local ctx_y = 2.1
 	fs = draw_grid(fs, GRID_CONTROL, ctx_x, ctx_y, ctx_cell, ctx_gap)
-	fs = fs .. "label[" .. ctx_x .. "," .. (ctx_y - 0.2) .. ";"
-		.. c(grey, "Side view") .. "]"
 
 	-- Placement notes
 	local y = ctx_y + 5 * ctx_step + 0.15
@@ -403,26 +397,21 @@ local function build_page_controls_and_startup(fs)
 	fs = fs .. "box[0.6," .. y .. ";7.8,0.02;#333333]"
 	y = y + 0.25
 
-	-- Startup procedure (compact)
+	-- Startup procedure (compact, tier-specific)
 	local inc = 0.38
 	local function line(text)
 		fs = fs .. "label[0.6," .. y .. ";" .. text .. "]"
 		y = y + inc
 	end
 
-	line(c("#ffffff", "1. Select tier in the Control Panel"))
-	line(c("#ffffff", "2. Connect Jumpstarter to HV network"))
-	line(c(grey, "   T1: ") .. c("#ffcc00", "45k EU")
-		.. c(grey, "  T2: ") .. c("#ffcc00", "85k EU")
-		.. c(grey, "  T3: ") .. c("#ffcc00", "200k EU"))
-	line(c("#ffffff", "3. Click ") .. c("#00ccaa", "[Check Structure]"))
-	line(c("#ffffff", "4. Load fuel rods (") .. c(grey, "3 / 6 / 12 by tier") .. c("#ffffff", ")"))
-	line(c("#ffffff", "5. Click ") .. c("#00ccaa", "[Jump Start]") .. c(grey, " (5s charge)"))
-	line(c("#ffffff", "6. Click ") .. c("#00ccaa", "[Inject Fuel & Start]"))
-	line(c(grey, "   T1: ") .. c("#00ff66", "140k EU")
-		.. c(grey, "  T2: ") .. c("#00ff66", "240k EU")
-		.. c(grey, "  T3: ") .. c("#00ff66", "550k EU"))
-	line(c("#ffffff", "7. Set Power Output tier: LV / MV / HV"))
+	line(c("#ffffff", "1. Connect Jumpstarter to HV network"))
+	line(c(grey, "   Requires: ") .. c("#ffcc00", tier.jumpstart .. " EU"))
+	line(c("#ffffff", "2. Click ") .. c("#00ccaa", "[Check Structure]"))
+	line(c("#ffffff", "3. Load ") .. c(grey, tostring(tier.rods)) .. c("#ffffff", " fuel rods"))
+	line(c("#ffffff", "4. Click ") .. c("#00ccaa", "[Jump Start]") .. c(grey, " (5s charge)"))
+	line(c("#ffffff", "5. Click ") .. c("#00ccaa", "[Inject Fuel & Start]"))
+	line(c(grey, "   Output: ") .. c("#00ff66", tier.power .. " EU"))
+	line(c("#ffffff", "6. Set Power Output tier: LV / MV / HV"))
 
 	y = y + 0.1
 	line(c(grey, "Deactivate preserves fuel. Resume without recharging."))
@@ -452,7 +441,7 @@ local function build_guide_page(tab, page)
 	elseif page >= 2 and page <= 6 then
 		fs = build_tier_model_page(fs, tab, page)
 	elseif page == 7 then
-		fs = build_page_controls_and_startup(fs)
+		fs = build_page_controls_and_startup(fs, tab)
 	end
 
 	-- Navigation (within tab)
