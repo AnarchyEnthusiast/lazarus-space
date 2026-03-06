@@ -70,9 +70,8 @@ local function build_page_overview(fs)
 
 	y = y + 0.3
 	line(c(white, "Obtaining Decaying Uranium:"))
-	line("  " .. c(grey, "Build a ") .. c(gold, "Technic Reactor") .. c(grey, " inside the"))
-	line("  " .. c(grey, "disrupted space field. While the reactor core is"))
-	line("  " .. c(grey, "active, break it \xe2\x80\x94 it transmutes into ") .. c(gold, "Decaying Uranium") .. c(grey, "."))
+	line("  " .. c(grey, "While the reactor core is active inside the field,"))
+	line("  " .. c(grey, "break it \xe2\x80\x94 it transmutes into ") .. c(gold, "Decaying Uranium") .. c(grey, "."))
 	line("  " .. c(grey, "Handle with extreme care (see page 4)."))
 
 	y = y + 0.3
@@ -108,6 +107,10 @@ local function build_page_setup(fs)
 		y = y + inc
 	end
 
+	line(c(grey, "Build and activate a Technic Reactor before powering"))
+	line(c(grey, "the Continuum Disrupter."))
+
+	y = y + 0.2
 	line(c(white, "1. Place the Continuum Disrupter"))
 	line(c(white, "2. Connect to an HV power network"))
 	line(c(white, "3. Right-click to open the control panel"))
