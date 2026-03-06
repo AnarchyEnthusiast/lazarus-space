@@ -80,68 +80,30 @@ local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, t
 end
 
 -- ============================================================
--- TEXTURE HELPERS FOR 3D PREVIEW
+-- 3D PREVIEW
 -- ============================================================
 
-local function is_normal_node(item_name)
-	if item_name == "" then return false end
-	local def = minetest.registered_nodes[item_name]
-	if not def then return false end
-	local dt = def.drawtype or "normal"
-	if dt ~= "normal" and dt ~= "allfaces" and dt ~= "allfaces_optional"
-	   and dt ~= "glasslike" and dt ~= "glasslike_framed" then
-		return false
-	end
-	if not def.tiles or not def.tiles[1] then return false end
-	local tile = def.tiles[1]
-	if type(tile) == "table" then tile = tile.name or "" end
-	if tile == "" or tile:find("%^") then return false end
-	return true
-end
-
-local function get_node_tile(item_name)
-	local def = minetest.registered_nodes[item_name]
-	if not def or not def.tiles or not def.tiles[1] then
-		return "lazarus_space_grid_filled.png"
-	end
-	local tile = def.tiles[1]
-	if type(tile) == "table" then tile = tile.name or "" end
-	if tile == "" then return "lazarus_space_grid_filled.png" end
-	return tile
-end
-
-local function build_layer_textures(pos, layer_num)
-	local meta = minetest.get_meta(pos)
-	local inv = meta:get_inventory()
-	local textures = {}
-	for i = 1, 9 do
-		local stack = inv:get_stack("layer" .. layer_num, i)
-		if stack:is_empty() then
-			textures[i] = "lazarus_space_grid_active.png"
-		elseif is_normal_node(stack:get_name()) then
-			textures[i] = get_node_tile(stack:get_name())
-		else
-			textures[i] = "lazarus_space_grid_filled.png"
-		end
-	end
-	return table.concat(textures, ",")
-end
-
-
 local function add_cube_preview(fs, pos, active_layer)
-	local tex_str = build_layer_textures(pos, active_layer)
-	local mesh = "crafting3d_layer.obj"
-	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
-		"Layer " .. active_layer) .. "]"
+	local mesh
+	local label
 
-	-- Unique model name prevents texture caching between formspec updates
+	if active_layer >= 1 and active_layer <= 3 then
+		mesh = "crafting3d_layer.obj"
+		label = "Layer " .. active_layer
+	else
+		mesh = "crafting3d_full.obj"
+		label = "All Layers"
+	end
+
+	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa", label) .. "]"
+
+	-- Single wireframe texture for all cubes — item_image[] overlays show items
 	local model_name = "craft3d_" .. os.time() .. "_" .. math.random(10000)
-
 	fs = fs .. "model[8.64,1.8;7.32,6.36;" .. model_name .. ";"
-		.. mesh .. ";" .. tex_str
+		.. mesh .. ";lazarus_space_grid_active.png"
 		.. ";20,-30;false;true]"
 
-	-- Overlay item_image[] for non-normal items (wield texture centered on cube)
+	-- Overlay item_image[] on filled slots
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
 	local img_size = 1.2
@@ -150,19 +112,23 @@ local function add_cube_preview(fs, pos, active_layer)
 	local sx_step = 1.6
 	local sy_step = 1.4
 
-	for row = 1, 3 do
-		for col = 1, 3 do
-			local idx = (row - 1) * 3 + col
-			local stack = inv:get_stack("layer" .. active_layer, idx)
-			if not stack:is_empty() and not is_normal_node(stack:get_name()) then
-				local ix = cx + (col - 2) * sx_step - img_size / 2
-				local iy = cy + (row - 2) * sy_step - img_size / 2
-				fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
-					.. img_size .. "," .. img_size .. ";"
-					.. stack:get_name() .. "]"
+	if active_layer >= 1 and active_layer <= 3 then
+		-- Per-layer: overlay items on the flat 3x3 grid
+		for row = 1, 3 do
+			for col = 1, 3 do
+				local idx = (row - 1) * 3 + col
+				local stack = inv:get_stack("layer" .. active_layer, idx)
+				if not stack:is_empty() then
+					local ix = cx + (col - 2) * sx_step - img_size / 2
+					local iy = cy + (row - 2) * sy_step - img_size / 2
+					fs = fs .. "item_image[" .. ix .. "," .. iy .. ";"
+						.. img_size .. "," .. img_size .. ";"
+						.. stack:get_name() .. "]"
+				end
 			end
 		end
 	end
+	-- No item overlays on "All" view — too cluttered at 27 positions
 
 	return fs
 end
@@ -243,7 +209,7 @@ end
 build_crafting3d_formspec = function(pos)
 	local meta = minetest.get_meta(pos)
 	local layer = meta:get_int("active_layer")
-	if layer < 1 or layer > 3 then layer = 1 end
+	if layer < 1 or layer > 4 then layer = 1 end
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 
 	local fs = "formspec_version[4]"
@@ -267,9 +233,19 @@ build_crafting3d_formspec = function(pos)
 				btn_name, tostring(i), "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
 		end
 	end
+	-- "All" button
+	if layer == 4 then
+		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
+			"layer_4", "All", "#00ccaa", "#00ddbb", "#009988")
+	else
+		fs = styled_btn(fs, 0.6 + 3 * 1.56, 1.8, 1.32, 0.84,
+			"layer_4", "All", "#2a2a3e", "#3a3a4e", "#1a1a2e", "#aaaaaa")
+	end
 
 	-- Left side: crafting grid (direct item placement)
-	fs = add_layer_grid(fs, pos, layer)
+	local edit_layer = layer
+	if edit_layer == 4 then edit_layer = 1 end
+	fs = add_layer_grid(fs, pos, edit_layer)
 
 	-- Right side: 3D preview
 	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
@@ -286,7 +262,9 @@ build_crafting3d_formspec = function(pos)
 		.. "list[current_player;main;0.6,11.25;8,3;8]"
 
 	-- Shift-click targets
-	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. layer .. "]"
+	local shift_layer = layer
+	if shift_layer == 4 then shift_layer = 1 end
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";layer" .. shift_layer .. "]"
 		.. "listring[current_player;main]"
 		.. "listring[nodemeta:" .. pos_str .. ";output]"
 		.. "listring[current_player;main]"
@@ -368,7 +346,7 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 	local node = minetest.get_node(pos)
 	if node.name ~= "lazarus_space:crafting_station_3d" then return end
 
-	for i = 1, 3 do
+	for i = 1, 4 do
 		if fields["layer_" .. i] then
 			local meta = minetest.get_meta(pos)
 			meta:set_int("active_layer", i)
