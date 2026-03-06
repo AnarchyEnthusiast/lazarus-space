@@ -70,7 +70,7 @@ local function build_page_overview(fs)
 
 	y = y + 0.3
 	line(c(white, "Obtaining Decaying Uranium:"))
-	line("  " .. c(grey, "Build a ") .. c(gold, "Magnetic Fusion Reactor") .. c(grey, " inside the"))
+	line("  " .. c(grey, "Build a ") .. c(gold, "Technic Reactor") .. c(grey, " inside the"))
 	line("  " .. c(grey, "disrupted space field. While the reactor core is"))
 	line("  " .. c(grey, "active, break it \xe2\x80\x94 it transmutes into ") .. c(gold, "Decaying Uranium") .. c(grey, "."))
 	line("  " .. c(grey, "Handle with extreme care (see page 4)."))
@@ -116,8 +116,8 @@ local function build_page_setup(fs)
 	line(c(grey, "   at ") .. c(green, "36,000 EU") .. c(grey, " per tick (~5 seconds)"))
 
 	y = y + 0.2
-	line(c(grey, "Particle rings will form around the device as it charges."))
-	line(c(grey, "Once complete, the field deploys automatically."))
+	line(c(grey, "Once the field is active, everything inside it will"))
+	line(c(grey, "be frozen in time."))
 
 	return fs
 end
@@ -141,28 +141,13 @@ local function build_page_portal(fs)
 	local teal = "#00ccaa"
 	local white = "#ffffff"
 	local grey = "#aaaaaa"
-	local green = "#00ff66"
 
-	line(c(white, "1. Hold ") .. c(teal, "Decaying Uranium") .. c(white, " in your hand"))
-	line(c(white, "2. Right-click the ") .. c(teal, "Warp Device") .. c(white, " inside the field"))
-	line(c(white, "3. The device glows through 4 stages (~3 seconds)"))
-	line(c(white, "4. Uranium is consumed \xe2\x80\x94 portal growth begins"))
+	line(c(white, "1. Place a ") .. c(teal, "Warp Device") .. c(white, " inside the field"))
+	line(c(white, "2. Hold ") .. c(teal, "Decaying Uranium") .. c(white, " in your hand"))
+	line(c(white, "3. Right-click the ") .. c(teal, "Warp Device"))
 
-	y = y + 0.25
-	line(c(grey, "The portal spreads as a glowing surface coating on all"))
-	line(c(grey, "walls, floors, and ceilings inside the field."))
-
-	y = y + 0.25
-	line(c(white, "When growth completes (after a short delay):"))
-	fs = fs .. "label[0.6," .. y .. ";" .. c(green, "   \"The portal is ready.\"") .. "]"
-	y = y + inc
-
-	y = y + 0.25
-	line(c(white, "Walk into any glowing portal surface to teleport."))
-
-	y = y + 0.25
-	line(c(grey, "Destination: Random location within ") .. c(teal, "\xc2\xb110,000 blocks") .. c(grey, "."))
-	line(c(grey, "You will land on terrain between ") .. c(teal, "Y=85") .. c(grey, " and ") .. c(teal, "Y=120") .. c(grey, "."))
+	y = y + 0.3
+	line(c(grey, "This will open the portal."))
 
 	return fs
 end
