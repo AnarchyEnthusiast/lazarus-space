@@ -594,7 +594,12 @@ local function build_reactor_formspec(pos)
 		js_progress = 100
 	end
 
-	local fs = "size[9,12.5]"
+	-- Dynamic fuel section height: T1/T2 single row, T3 two rows
+	local fuel_box_h = (tier.fuel_slots <= 6) and 1.8 or 3.0
+	local fuel_offset = fuel_box_h - 1.8  -- 0 for T1/T2, 1.2 for T3
+	local form_h = 12.5 + fuel_offset
+
+	local fs = "size[9," .. form_h .. "]"
 		.. "bgcolor[#080808;true]"
 		.. "listcolors[#1a1a2e;#2a2a3e;#333355]"
 		-- Header
@@ -608,22 +613,24 @@ local function build_reactor_formspec(pos)
 	fs = fs .. "label[8.5,1.9;" .. js_progress .. "%]"
 
 	-- Fuel section (variable layout per tier)
-	fs = fs .. "box[0,2.5;8.8,1.8;#0d0d1a]"
+	fs = fs .. "box[0,2.5;8.8," .. fuel_box_h .. ";#0d0d1a]"
 		.. "label[0.3,2.6;Fuel Rods (" .. fuel_count .. "/" .. tier.fuel_slots .. ")]"
 	if tier.fuel_slots <= 3 then
 		fs = fs .. "list[context;fuel;2.5,3;3,1;]"
 	elseif tier.fuel_slots <= 6 then
 		fs = fs .. "list[context;fuel;1.5,3;6,1;]"
 	else
-		fs = fs .. "list[context;fuel;0.5,3;6,2;]"
+		-- Two rows of 6, second row starts at slot index 6
+		fs = fs .. "list[context;fuel;1.5,3;6,1;]"
+			.. "list[context;fuel;1.5,4.25;6,1;6]"
 	end
 
-	-- Power section
-	fs = fs .. "box[0,4.5;8.8,1.2;#0d0d1a]"
+	-- Power section (offset for T3's taller fuel box)
+	fs = fs .. "box[0," .. (4.5 + fuel_offset) .. ";8.8,1.2;#0d0d1a]"
 	if hv_ready then
-		fs = fs .. "label[0.3,4.6;HV Power: " .. minetest.colorize("#00ff66", "READY") .. "]"
+		fs = fs .. "label[0.3," .. (4.6 + fuel_offset) .. ";HV Power: " .. minetest.colorize("#00ff66", "READY") .. "]"
 	else
-		fs = fs .. "label[0.3,4.6;HV Power: " .. minetest.colorize("#ff3333", "INSUFFICIENT") .. "]"
+		fs = fs .. "label[0.3," .. (4.6 + fuel_offset) .. ";HV Power: " .. minetest.colorize("#ff3333", "INSUFFICIENT") .. "]"
 	end
 
 	if state == "active" then
@@ -635,50 +642,50 @@ local function build_reactor_formspec(pos)
 			local t = po_meta:get_string("output_tier")
 			if t ~= "" then output_tier = t end
 		end
-		fs = fs .. "label[0.3,5.1;Output: " .. minetest.colorize("#00ccaa",
+		fs = fs .. "label[0.3," .. (5.1 + fuel_offset) .. ";Output: " .. minetest.colorize("#00ccaa",
 			tier.power_output .. " EU") .. " (" .. output_tier .. ")]"
 		-- Fuel remaining with gradient drain bar
-		fs = fs .. "label[0.3,5.8;Fuel Remaining: " .. format_time(fuel_time) .. "]"
+		fs = fs .. "label[0.3," .. (5.8 + fuel_offset) .. ";Fuel Remaining: " .. format_time(fuel_time) .. "]"
 		local fuel_pct = math.floor(fuel_time / tier.fuel_duration * 100)
-		fs = gradient_bar(fs, 0.5, 6.3, 7.8, 0.4, fuel_pct)
+		fs = gradient_bar(fs, 0.5, 6.3 + fuel_offset, 7.8, 0.4, fuel_pct)
 	end
 
-	-- Control buttons
+	-- Control buttons (offset for T3's taller fuel box)
 	if state == "standby" then
 		if hv_ready then
-			fs = styled_btn(fs, 2.5, 5.8, 4, 0.7, "jump_start", "Jump Start",
+			fs = styled_btn(fs, 2.5, 5.8 + fuel_offset, 4, 0.7, "jump_start", "Jump Start",
 				"#00ccaa", "#00ddbb", "#009988")
 		else
-			fs = styled_btn(fs, 2.5, 5.8, 4, 0.7, "jump_start_disabled",
+			fs = styled_btn(fs, 2.5, 5.8 + fuel_offset, 4, 0.7, "jump_start_disabled",
 				"Jump Start (HV not ready)", "#333333", "#333333", "#333333", "#666666")
 		end
 	elseif state == "jump_starting" then
 		local js_elapsed = meta:get_float("js_elapsed")
 		local js_remaining = math.max(0, tier.charge_time - js_elapsed)
-		fs = fs .. "label[2.8,5.9;" .. minetest.colorize("#ff8800",
+		fs = fs .. "label[2.8," .. (5.9 + fuel_offset) .. ";" .. minetest.colorize("#ff8800",
 			"Jump Starting... " .. string.format("%.1fs", js_remaining)) .. "]"
 	elseif state == "jump_started" then
 		local remaining = meta:get_int("remaining_fuel_time")
 		if remaining > 0 then
 			-- Resume with stored fuel time — no rods needed
-			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "resume", "Resume Reactor",
+			fs = styled_btn(fs, 1.5, 5.8 + fuel_offset, 6, 0.7, "resume", "Resume Reactor",
 				"#00cc66", "#00dd77", "#009955")
 		elseif filled_slots >= tier.fuel_slots then
-			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject", "Inject Fuel & Start",
+			fs = styled_btn(fs, 1.5, 5.8 + fuel_offset, 6, 0.7, "inject", "Inject Fuel & Start",
 				"#00cc66", "#00dd77", "#009955")
 		else
-			fs = styled_btn(fs, 1.5, 5.8, 6, 0.7, "inject_disabled",
+			fs = styled_btn(fs, 1.5, 5.8 + fuel_offset, 6, 0.7, "inject_disabled",
 				"Need 1 rod in each of " .. tier.fuel_slots .. " slots",
 				"#333333", "#333333", "#333333", "#666666")
 		end
 	elseif state == "active" then
-		fs = styled_btn(fs, 2.0, 7.0, 5, 0.7, "deactivate", "Deactivate Reactor",
+		fs = styled_btn(fs, 2.0, 7.0 + fuel_offset, 5, 0.7, "deactivate", "Deactivate Reactor",
 			"#cc3333", "#dd4444", "#aa2222")
 	end
 
-	-- Player inventory
-	fs = fs .. "list[current_player;main;0.5,8;8,1;]"
-		.. "list[current_player;main;0.5,9.2;8,3;8]"
+	-- Player inventory (offset for T3's taller fuel box)
+	fs = fs .. "list[current_player;main;0.5," .. (8 + fuel_offset) .. ";8,1;]"
+		.. "list[current_player;main;0.5," .. (9.2 + fuel_offset) .. ";8,3;8]"
 		.. "listring[context;fuel]"
 		.. "listring[current_player;main]"
 
