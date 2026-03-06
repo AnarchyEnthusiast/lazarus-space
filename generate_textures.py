@@ -734,6 +734,62 @@ def generate_portal_guide():
     return img
 
 
+def generate_grid_empty():
+    """16x16 dark semi-transparent outline for empty 3D preview slots."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                img.putpixel((x, y), (0x33, 0x33, 0x33, 100))
+            else:
+                img.putpixel((x, y), (0, 0, 0, 0))
+    return img
+
+
+def generate_grid_active():
+    """16x16 teal semi-transparent outline for active layer empty slots."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                img.putpixel((x, y), (0x00, 0xcc, 0xaa, 160))
+            else:
+                img.putpixel((x, y), (0, 0, 0, 0))
+    return img
+
+
+def generate_crafting_station_3d():
+    """16x16 dark metallic block with teal grid pattern for the crafting station."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Dark metallic base
+            r, g, b = 0x2a, 0x2a, 0x30
+
+            # 1px bevel border
+            if x == 0 or y == 0:
+                r = clamp(r + 15); g = clamp(g + 15); b = clamp(b + 15)
+            if x == 15 or y == 15:
+                r = clamp(r - 15); g = clamp(g - 15); b = clamp(b - 15)
+
+            # Teal grid pattern (3x3 subdivision)
+            if x % 5 == 2 or y % 5 == 2:
+                r = 0x00; g = 0x66; b = 0x55
+
+            # Brighter teal at grid intersections
+            if x % 5 == 2 and y % 5 == 2:
+                r = 0x00; g = 0xaa; b = 0x88
+
+            # Center diamond accent
+            cx, cy = abs(x - 7.5), abs(y - 7.5)
+            if cx + cy < 3:
+                r = 0x00; g = 0xcc; b = 0xaa
+
+            n = random.randint(-3, 3)
+            img.putpixel((x, y), (clamp(r + n), clamp(g + n), clamp(b + n), 255))
+    return img
+
+
 def generate_disrupted_space_variants():
     """Generate 20 opacity variants of the disrupted space texture.
 
@@ -893,6 +949,9 @@ def main():
         "lazarus_space_reactor_guide.png": generate_reactor_guide(),
         "lazarus_space_plasma_diagnostic.png": generate_plasma_diagnostic(),
         "lazarus_space_portal_guide.png": generate_portal_guide(),
+        "lazarus_space_grid_empty.png": generate_grid_empty(),
+        "lazarus_space_grid_active.png": generate_grid_active(),
+        "lazarus_space_crafting_station_3d.png": generate_crafting_station_3d(),
     }
 
     # Add 20 disrupted space opacity variants.

@@ -411,6 +411,123 @@ def generate_obj(name, layer_grids):
     print(f"Generated {name}.obj ({len(vertices)} vertices, {len(faces)} faces)")
 
 
+def generate_crafting3d_grid():
+    """Generate a 3x3x3 wireframe grid .obj with 27 material groups.
+
+    Each of the 27 positions is a small cube (0.9 units) with 0.1 unit gaps.
+    Material groups are named slot_L{layer}_R{row}_C{col} where layer=1-3,
+    row=1-3, col=1-3. Order: layer 1 first (bottom), row-major within each layer.
+    """
+    lines = []
+    lines.append("# Crafting 3D grid — 27 material groups for per-slot texturing")
+    lines.append("")
+
+    vert_offset = 1
+    cube_size = 0.9
+    gap = 0.1
+    step = cube_size + gap  # 1.0
+
+    # Center the grid around origin
+    offset = -1.0  # so positions go from -1.0 to +1.0 (centers at -1, 0, 1)
+
+    all_groups = []
+
+    for layer in range(1, 4):
+        for row in range(1, 4):
+            for col in range(1, 4):
+                mat_name = f"slot_L{layer}_R{row}_C{col}"
+                # Position: col→x, layer→y, row→z
+                x0 = offset + (col - 1) * step
+                y0 = offset + (layer - 1) * step
+                z0 = offset + (row - 1) * step
+                x1 = x0 + cube_size
+                y1 = y0 + cube_size
+                z1 = z0 + cube_size
+
+                # 8 vertices
+                verts = [
+                    (x0, y0, z0),  # 0
+                    (x1, y0, z0),  # 1
+                    (x1, y1, z0),  # 2
+                    (x0, y1, z0),  # 3
+                    (x0, y0, z1),  # 4
+                    (x1, y0, z1),  # 5
+                    (x1, y1, z1),  # 6
+                    (x0, y1, z1),  # 7
+                ]
+
+                # UV coordinates (full texture per face)
+                uvs = [
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    (1.0, 1.0),
+                    (0.0, 1.0),
+                ]
+
+                # 6 faces (quads): front, back, top, bottom, right, left
+                # Each face references 4 vertices and 4 UVs
+                faces = [
+                    # front (-z): v0,v1,v2,v3
+                    (0, 1, 2, 3, 1),
+                    # back (+z): v5,v4,v7,v6
+                    (5, 4, 7, 6, 2),
+                    # top (+y): v3,v2,v6,v7
+                    (3, 2, 6, 7, 3),
+                    # bottom (-y): v4,v5,v1,v0
+                    (4, 5, 1, 0, 4),
+                    # right (+x): v1,v5,v6,v2
+                    (1, 5, 6, 2, 5),
+                    # left (-x): v4,v0,v3,v7
+                    (4, 0, 3, 7, 6),
+                ]
+
+                all_groups.append((mat_name, verts, uvs, faces, vert_offset))
+                vert_offset += 8
+
+    # Write all vertices
+    for mat_name, verts, uvs, faces, vo in all_groups:
+        for vx, vy, vz in verts:
+            lines.append(f"v {vx:.4f} {vy:.4f} {vz:.4f}")
+    lines.append("")
+
+    # Write UV coordinates (same 4 UVs reused per cube)
+    uv_offset = 1
+    for mat_name, verts, uvs, faces, vo in all_groups:
+        for u, v in uvs:
+            lines.append(f"vt {u:.4f} {v:.4f}")
+    lines.append("")
+
+    # Write normals (6 directions, shared)
+    lines.append("vn  0  0 -1")  # 1: front
+    lines.append("vn  0  0  1")  # 2: back
+    lines.append("vn  0  1  0")  # 3: top
+    lines.append("vn  0 -1  0")  # 4: bottom
+    lines.append("vn  1  0  0")  # 5: right
+    lines.append("vn -1  0  0")  # 6: left
+    lines.append("")
+
+    # Write faces grouped by material
+    uv_idx = 1
+    for mat_name, verts, uvs, faces, vo in all_groups:
+        lines.append(f"usemtl {mat_name}")
+        for v0, v1, v2, v3, ni in faces:
+            t1, t2, t3, t4 = uv_idx, uv_idx + 1, uv_idx + 2, uv_idx + 3
+            lines.append(
+                f"f {vo+v0}/{t1}/{ni} {vo+v1}/{t2}/{ni} "
+                f"{vo+v2}/{t3}/{ni} {vo+v3}/{t4}/{ni}"
+            )
+        uv_idx += 4
+    lines.append("")
+
+    obj_path = os.path.join(MODELS_DIR, "crafting3d_grid.obj")
+    with open(obj_path, "w") as f:
+        f.write("\n".join(lines))
+
+    total_verts = 27 * 8
+    total_faces = 27 * 6
+    print(f"Generated crafting3d_grid.obj ({total_verts} vertices, {total_faces} faces, 27 materials)")
+
+
 def main():
     # Remove old un-prefixed files
     old_names = [
@@ -436,6 +553,9 @@ def main():
     # Generate mesh files for all tiers
     for name, layer_grids in LAYERS.items():
         generate_obj(name, layer_grids)
+
+    # Generate 3D crafting grid model
+    generate_crafting3d_grid()
 
     print(f"\nAll models saved to {MODELS_DIR}")
     print("Lua texture: [combine:80x16 with escaped commas (see guide.lua)")
