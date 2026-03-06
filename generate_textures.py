@@ -673,6 +673,67 @@ def generate_reactor_guide():
     return img
 
 
+def generate_portal_guide():
+    """Book with purple/teal portal accent, 16x16."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Default transparent
+            r, g, b, a = 0, 0, 0, 0
+
+            # Book silhouette (x=2..14, y=1..14)
+            if 2 <= x <= 14 and 1 <= y <= 14:
+                r, g, b, a = 0x1a, 0x0d, 0x2e, 255  # dark purple
+
+            # Spine (left 2px of book)
+            if 2 <= x <= 3 and 1 <= y <= 14:
+                r, g, b, a = 0x11, 0x08, 0x22, 255
+
+            # Page edges (right side, 1px lighter)
+            if x == 4 and 2 <= y <= 13:
+                r, g, b, a = 0x33, 0x22, 0x44, 255
+
+            # Teal border inset on cover
+            if 5 <= x <= 14 and 1 <= y <= 14:
+                if y == 2 and 6 <= x <= 13:
+                    r, g, b = 0x00, 0xcc, 0xaa
+                if y == 13 and 6 <= x <= 13:
+                    r, g, b = 0x00, 0xcc, 0xaa
+                if x == 13 and 3 <= y <= 12:
+                    r, g, b = 0x00, 0xcc, 0xaa
+
+            # Portal spiral in center of cover
+            cx, cy = 9, 8
+            dx, dy = x - cx, y - cy
+            dist = math.sqrt(dx * dx + dy * dy)
+            if 1.0 < dist < 4.0:
+                angle = math.atan2(dy, dx)
+                spiral = (angle + dist * 0.8) % (2 * math.pi)
+                if spiral < math.pi * 0.7:
+                    bright = max(0, 1.0 - abs(dist - 2.5) / 1.5)
+                    r = clamp(int(0x00 + 0x33 * bright))
+                    g = clamp(int(0xcc * bright))
+                    b = clamp(int(0xee * bright))
+            # Bright center dot
+            if dist < 1.2:
+                r, g, b = 0x44, 0xff, 0xcc
+
+            # Star dots on cover
+            for sx, sy in [(7, 5), (11, 6), (8, 11), (12, 10)]:
+                if x == sx and y == sy:
+                    r, g, b = 0xcc, 0xcc, 0xff
+
+            # Title accent (teal line near top)
+            if y == 4 and 7 <= x <= 11:
+                r, g, b = 0x00, 0xff, 0xcc
+
+            if a > 0:
+                n = random.randint(-2, 2)
+                img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), a))
+
+    return img
+
+
 def generate_disrupted_space_variants():
     """Generate 20 opacity variants of the disrupted space texture.
 
@@ -831,6 +892,7 @@ def main():
         "lazarus_space_fusion_power_output.png": generate_fusion_power_output(),
         "lazarus_space_reactor_guide.png": generate_reactor_guide(),
         "lazarus_space_plasma_diagnostic.png": generate_plasma_diagnostic(),
+        "lazarus_space_portal_guide.png": generate_portal_guide(),
     }
 
     # Add 20 disrupted space opacity variants.
