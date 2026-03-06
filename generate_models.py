@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
-"""Generate .obj mesh files for the reactor guide book 3D models.
+"""Generate .obj mesh files and texture atlas for the reactor guide book.
 
 Uses a texture atlas approach: all block textures are combined into a single
 horizontal strip (80x16 pixels, 5 slots of 16x16 each). UV coordinates for
 each cube face point to the correct slot in the atlas. This avoids multi-material
 issues with Minetest's model[] formspec element.
 
-The corresponding Lua texture string uses [combine:80x16:...] to build the atlas
-at runtime from the individual block textures.
+The atlas PNG (lazarus_space_reactor_atlas.png) is generated at build time by
+compositing the 5 source textures side-by-side. This avoids using [combine in
+the formspec, whose commas conflict with model[] texture parameter parsing.
 
-Requires: Python 3.6+ (no external dependencies)
+Atlas layout (80x16, 5 slots of 16x16):
+  Slot 0 (x=0):  lazarus_space_pole_field.png
+  Slot 1 (x=16): lazarus_space_toroid_field.png
+  Slot 2 (x=32): default_steel_block.png (grey placeholder if unavailable)
+  Slot 3 (x=48): lazarus_space_plasma_field.png
+  Slot 4 (x=64): lazarus_space_pole_corrector.png
+
+If source textures change, re-run this script to regenerate the atlas.
+
+Requires: Python 3.6+, Pillow (PIL)
 """
 
 import os
@@ -246,6 +256,44 @@ def generate_obj(name, layer_grids):
     print(f"Generated {name}.obj ({len(vertices)} vertices, {len(faces)} faces)")
 
 
+def generate_atlas():
+    """Generate the 80x16 texture atlas PNG from source textures."""
+    from PIL import Image
+
+    tex_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "textures")
+
+    # Source textures in slot order (must match SLOT_MAP indices)
+    sources = [
+        ("lazarus_space_pole_field.png", None),
+        ("lazarus_space_toroid_field.png", None),
+        ("default_steel_block.png", "#888888"),  # fallback grey if missing
+        ("lazarus_space_plasma_field.png", None),
+        ("lazarus_space_pole_corrector.png", None),
+    ]
+
+    atlas = Image.new("RGBA", (80, 16))
+
+    for slot, (filename, fallback_color) in enumerate(sources):
+        path = os.path.join(tex_dir, filename)
+        if os.path.exists(path):
+            tile = Image.open(path).convert("RGBA").resize((16, 16))
+        elif fallback_color:
+            # Generate solid color tile
+            r = int(fallback_color[1:3], 16)
+            g = int(fallback_color[3:5], 16)
+            b = int(fallback_color[5:7], 16)
+            tile = Image.new("RGBA", (16, 16), (r, g, b, 255))
+            print(f"  Using fallback {fallback_color} for missing {filename}")
+        else:
+            raise FileNotFoundError(f"Required texture not found: {path}")
+        atlas.paste(tile, (slot * 16, 0))
+
+    atlas_path = os.path.join(tex_dir, "lazarus_space_reactor_atlas.png")
+    atlas.save(atlas_path)
+    print(f"Generated texture atlas: lazarus_space_reactor_atlas.png (80x16)")
+    return atlas_path
+
+
 def main():
     # Remove old .mtl file if present (no longer needed)
     mtl_path = os.path.join(MODELS_DIR, "reactor_guide.mtl")
@@ -253,16 +301,14 @@ def main():
         os.remove(mtl_path)
         print("Removed old reactor_guide.mtl (no longer needed)")
 
+    # Generate texture atlas
+    generate_atlas()
+
+    # Generate mesh files
     for name, layer_grids in LAYERS.items():
         generate_obj(name, layer_grids)
     print(f"\nAll models saved to {MODELS_DIR}")
-    print(f"\nLua texture string:")
-    print(f'  "[combine:80x16'
-          f':0,0=lazarus_space_pole_field.png'
-          f':16,0=lazarus_space_toroid_field.png'
-          f':32,0=default_steel_block.png'
-          f':48,0=lazarus_space_plasma_field.png'
-          f':64,0=lazarus_space_pole_corrector.png"')
+    print(f"Lua texture reference: lazarus_space_reactor_atlas.png")
 
 
 if __name__ == "__main__":

@@ -98,7 +98,7 @@ end
 -- 3D MODEL HELPER — texture atlas approach
 -- ============================================================
 -- All models use a single material. UV coords point to the correct
--- tile in an 80x16 atlas built at runtime with [combine.
+-- tile in an 80x16 pre-generated atlas PNG (no [combine at runtime).
 
 local PAGE_MODELS = {
 	[2] = "reactor_layer_floor.obj",
@@ -109,13 +109,8 @@ local PAGE_MODELS = {
 	[9] = "reactor_complete.obj",
 }
 
--- Single combined texture atlas: 5 slots of 16x16 in a horizontal strip
-local MODEL_TEXTURE = "[combine:80x16"
-	.. ":0,0=lazarus_space_pole_field.png"
-	.. ":16,0=lazarus_space_toroid_field.png"
-	.. ":32,0=default_steel_block.png"
-	.. ":48,0=lazarus_space_plasma_field.png"
-	.. ":64,0=lazarus_space_pole_corrector.png"
+-- Pre-generated 80x16 atlas PNG (avoids [combine commas breaking model[] parsing)
+local MODEL_TEXTURE = "lazarus_space_reactor_atlas.png"
 
 local function add_model(fs, page, x, y, w, h, rot_x, rot_y)
 	local mesh = PAGE_MODELS[page]
