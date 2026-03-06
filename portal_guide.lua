@@ -183,8 +183,6 @@ local function build_page_safety(fs)
 	line(c(red, "DECAYING URANIUM IS LETHAL OUTSIDE THE FIELD"))
 	y = y + 0.05
 	line("  " .. c(gold, "\xe2\x80\xa2") .. c(grey, " Carrying it in your inventory deals fatal damage"))
-	line("  " .. c(gold, "\xe2\x80\xa2") .. c(grey, " Placing a uranium block outside the field"))
-	line(c(grey, "    triggers a massive explosion (15 block radius)"))
 	line("  " .. c(gold, "\xe2\x80\xa2") .. c(grey, " It is ONLY safe inside an active disrupted space field"))
 
 	y = y + 0.3
