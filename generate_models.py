@@ -412,94 +412,88 @@ def generate_obj(name, layer_grids):
 
 
 def generate_crafting3d_grid():
-    """Generate a 3x3x3 grid .obj with single-material atlas UV approach.
+    """Generate a flat 3x3 grid .obj with single-material atlas UV approach.
 
-    Each of the 27 positions is a small cube (0.6 units) with 0.08 unit gaps.
-    Uses a 432x16 atlas (27 slots of 16x16). UV coordinates map each cube's
-    faces to its slot in the atlas. Single material avoids Irrlicht mesh buffer
-    merging issues.
-
-    Order: layer 1 first (bottom), row-major within each layer.
+    9 cubes in a 3x3 arrangement (one layer). Uses a 144x16 atlas (9 slots
+    of 16x16). UV coordinates map each cube's faces to its slot in the atlas.
     """
-    NUM_CUBES = 27
+    NUM_CUBES = 9
     lines = []
-    lines.append("# Crafting 3D grid — single material, atlas UV approach")
-    lines.append("# UV coords select tile in [combine atlas built at runtime")
+    lines.append("# Crafting 3D grid — single layer, atlas UV approach")
+    lines.append("# UV coords select tile in 144x16 atlas")
     lines.append("")
 
     vert_offset = 1
     uv_offset = 1
-    cube_size = 0.6
-    gap = 0.08
-    step = cube_size + gap  # 0.68
+    cube_size = 0.7
+    gap = 0.1
+    step = cube_size + gap  # 0.8
 
     # Center the grid around origin
-    total_span = 3 * cube_size + 2 * gap  # 2.04
-    origin = -total_span / 2  # -1.02
+    total_span = 3 * cube_size + 2 * gap  # 2.3
+    origin = -total_span / 2
 
     vertices = []
     uvs = []
-    faces = []  # (v1,v2,v3,v4, t1,t2,t3,t4, normal_idx)
+    faces = []
 
     slot = 0
-    for layer in range(1, 4):
-        for row in range(1, 4):
-            for col in range(1, 4):
-                # Position: col→x, layer→y, row→z
-                x0 = origin + (col - 1) * step
-                y0 = origin + (layer - 1) * step
-                z0 = origin + (row - 1) * step
-                x1 = x0 + cube_size
-                y1 = y0 + cube_size
-                z1 = z0 + cube_size
+    for row in range(1, 4):
+        for col in range(1, 4):
+            # Position: col→x, row→z, flat on y=0
+            x0 = origin + (col - 1) * step
+            y0 = 0
+            z0 = origin + (row - 1) * step
+            x1 = x0 + cube_size
+            y1 = cube_size
+            z1 = z0 + cube_size
 
-                # 8 corner vertices
-                corners = [
-                    (x0, y0, z0),  # 0
-                    (x1, y0, z0),  # 1
-                    (x1, y1, z0),  # 2
-                    (x0, y1, z0),  # 3
-                    (x0, y0, z1),  # 4
-                    (x1, y0, z1),  # 5
-                    (x1, y1, z1),  # 6
-                    (x0, y1, z1),  # 7
-                ]
-                vertices.extend(corners)
+            # 8 corner vertices
+            corners = [
+                (x0, y0, z0),  # 0
+                (x1, y0, z0),  # 1
+                (x1, y1, z0),  # 2
+                (x0, y1, z0),  # 3
+                (x0, y0, z1),  # 4
+                (x1, y0, z1),  # 5
+                (x1, y1, z1),  # 6
+                (x0, y1, z1),  # 7
+            ]
+            vertices.extend(corners)
 
-                # UV coordinates for this cube's atlas slot
-                u_min = slot / NUM_CUBES
-                u_max = (slot + 1) / NUM_CUBES
-                uvs.append((u_min, 0.0))
-                uvs.append((u_max, 0.0))
-                uvs.append((u_max, 1.0))
-                uvs.append((u_min, 1.0))
+            # UV coordinates for this cube's atlas slot
+            u_min = slot / NUM_CUBES
+            u_max = (slot + 1) / NUM_CUBES
+            uvs.append((u_min, 0.0))
+            uvs.append((u_max, 0.0))
+            uvs.append((u_max, 1.0))
+            uvs.append((u_min, 1.0))
 
-                # 6 faces (all cubes visible, no face culling needed)
-                face_defs = [
-                    # (v0,v1,v2,v3, normal_index)
-                    (0, 1, 2, 3, 1),   # front  (-z)
-                    (5, 4, 7, 6, 2),   # back   (+z)
-                    (3, 2, 6, 7, 3),   # top    (+y)
-                    (4, 5, 1, 0, 4),   # bottom (-y)
-                    (1, 5, 6, 2, 5),   # right  (+x)
-                    (4, 0, 3, 7, 6),   # left   (-x)
-                ]
-                for vi0, vi1, vi2, vi3, ni in face_defs:
-                    faces.append((
-                        vert_offset + vi0,
-                        vert_offset + vi1,
-                        vert_offset + vi2,
-                        vert_offset + vi3,
-                        uv_offset + 0,
-                        uv_offset + 1,
-                        uv_offset + 2,
-                        uv_offset + 3,
-                        ni,
-                    ))
+            # 6 faces
+            face_defs = [
+                (0, 1, 2, 3, 1),   # front  (-z)
+                (5, 4, 7, 6, 2),   # back   (+z)
+                (3, 2, 6, 7, 3),   # top    (+y)
+                (4, 5, 1, 0, 4),   # bottom (-y)
+                (1, 5, 6, 2, 5),   # right  (+x)
+                (4, 0, 3, 7, 6),   # left   (-x)
+            ]
+            for vi0, vi1, vi2, vi3, ni in face_defs:
+                faces.append((
+                    vert_offset + vi0,
+                    vert_offset + vi1,
+                    vert_offset + vi2,
+                    vert_offset + vi3,
+                    uv_offset + 0,
+                    uv_offset + 1,
+                    uv_offset + 2,
+                    uv_offset + 3,
+                    ni,
+                ))
 
-                vert_offset += 8
-                uv_offset += 4
-                slot += 1
+            vert_offset += 8
+            uv_offset += 4
+            slot += 1
 
     # Write .obj file
     for vx, vy, vz in vertices:
@@ -531,8 +525,8 @@ def generate_crafting3d_grid():
     with open(obj_path, "w") as f:
         f.write("\n".join(lines))
 
-    total_verts = 27 * 8
-    total_faces = 27 * 6
+    total_verts = 9 * 8
+    total_faces = 9 * 6
     print(f"Generated crafting3d_grid.obj ({total_verts} vertices, {total_faces} faces, 1 material)")
 
 

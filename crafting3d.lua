@@ -1,5 +1,5 @@
 -- Lazarus Space: Dimensional Crafting Station (3x3x3 Cube)
--- 27-slot crafting grid across 3 layers with live 3D cube preview.
+-- 27-slot crafting grid across 3 layers with per-layer 3D preview.
 
 -- ============================================================
 -- REGISTERED 3D RECIPES
@@ -86,25 +86,14 @@ end
 local function build_atlas_texture(pos, active_layer)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
-	-- Build [combine texture with 27 slots (432x16 atlas)
-	local tex = "[combine:432x16"
-	local slot = 0
-	for layer = 1, 3 do
-		for row = 1, 3 do
-			for col = 1, 3 do
-				local idx = (row - 1) * 3 + col
-				local stack = inv:get_stack("layer" .. layer, idx)
-				local tile
-				if stack:is_empty() then
-					tile = (layer == active_layer)
-						and "lazarus_space_grid_active.png"
-						or "lazarus_space_grid_empty.png"
-				else
-					tile = "lazarus_space_grid_filled.png"
-				end
-				tex = tex .. ":" .. (slot * 16) .. "\\,0=" .. tile
-				slot = slot + 1
-			end
+	-- Start with pre-baked base atlas (9 tiles, all "active empty" style)
+	local tex = "lazarus_space_crafting3d_atlas.png"
+	-- Overlay solid teal fill for each occupied slot on the active layer
+	for i = 1, 9 do
+		local stack = inv:get_stack("layer" .. active_layer, i)
+		if not stack:is_empty() then
+			local x = (i - 1) * 16
+			tex = tex .. "^[fill:16x16:" .. x .. "\\,0:#00ccaaff"
 		end
 	end
 	return tex
@@ -116,6 +105,9 @@ end
 
 local function add_cube_preview(fs, pos, active_layer)
 	local atlas_tex = build_atlas_texture(pos, active_layer)
+	-- Layer indicator above preview
+	fs = fs .. "label[10.8,1.56;" .. minetest.colorize("#00ccaa",
+		"Layer " .. active_layer) .. "]"
 	fs = fs .. "model[8.76,1.8;7.08,6.24;craft3d_preview;"
 		.. "crafting3d_grid.obj;" .. atlas_tex
 		.. ";20,-30;false;true]"
@@ -219,8 +211,8 @@ build_crafting3d_formspec = function(pos)
 
 	-- 3D cube preview (right side)
 	fs = fs .. "box[8.4,1.2;7.8,7.2;#0a0a12]"
-	fs = fs .. "label[10.2,1.32;" .. minetest.colorize("#aaaaaa",
-		"3D Preview \xe2\x80\x94 click & drag to rotate") .. "]"
+	fs = fs .. "label[9.6,1.32;" .. minetest.colorize("#aaaaaa",
+		"Layer Preview \xe2\x80\x94 click & drag to rotate") .. "]"
 	fs = add_cube_preview(fs, pos, layer)
 
 	return fs
