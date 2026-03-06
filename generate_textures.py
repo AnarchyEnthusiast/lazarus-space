@@ -353,6 +353,39 @@ def generate_pole_field():
     return img
 
 
+def generate_steel_block():
+    """Grey industrial metal panel, 16x16. Beveled border, 4x4 subdivision
+    grid, rivet dots, brushed metal gradient. Same structure as pole_field
+    but in grey tones."""
+    img = Image.new("RGBA", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            # Base grey with vertical gradient (lighter top, darker bottom)
+            grad = 1.0 - y / 30.0
+            r = clamp(int(136 * grad))
+            g = clamp(int(136 * grad))
+            b = clamp(int(136 * grad))
+
+            # 1px beveled outer border
+            if x == 0 or y == 0:
+                r = clamp(r + 30); g = clamp(g + 30); b = clamp(b + 30)
+            if x == 15 or y == 15:
+                r = clamp(r - 40); g = clamp(g - 40); b = clamp(b - 40)
+
+            # 4x4 subdivision grid lines (slightly darker)
+            if x % 4 == 0 or y % 4 == 0:
+                r = clamp(r - 25); g = clamp(g - 25); b = clamp(b - 25)
+
+            # Rivet dots at grid intersections
+            if x % 4 == 0 and y % 4 == 0:
+                r = clamp(r + 40); g = clamp(g + 40); b = clamp(b + 40)
+
+            # Noise for brushed metal feel
+            n = random.randint(-8, 8)
+            img.putpixel((x, y), (clamp(r+n), clamp(g+n), clamp(b+n), 255))
+    return img
+
+
 def generate_toroid_field():
     """Cyan energy containment panel, 16x16. Semi-translucent glassy look
     with glowing cross pattern and diagonal highlight."""
@@ -696,6 +729,7 @@ def main():
         "lazarus_space_particle_black.png": generate_particle_black(),
         "lazarus_space_particle_white.png": generate_particle_white(),
         "lazarus_space_pole_field.png": generate_pole_field(),
+        "lazarus_space_steel_block.png": generate_steel_block(),
         "lazarus_space_toroid_field.png": generate_toroid_field(),
         "lazarus_space_plasma_field.png": generate_plasma_field(),
         "lazarus_space_pole_corrector.png": generate_pole_corrector(),

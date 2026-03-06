@@ -1,5 +1,5 @@
 -- Lazarus Space: Magnetic Fusion Reactor Build Guide
--- 9-page craftable guide book with interactive 3D model viewers.
+-- 8-page craftable guide book with interactive 3D model viewers.
 
 -- ============================================================
 -- PER-PLAYER PAGE TRACKING
@@ -104,9 +104,8 @@ local PAGE_MODELS = {
 	[2] = "reactor_layer_floor.obj",
 	[3] = "reactor_layer_walls.obj",
 	[4] = "reactor_layer_middle.obj",
-	[5] = "reactor_layer_middle.obj",
-	[6] = "reactor_layer_roof.obj",
-	[9] = "reactor_complete.obj",
+	[5] = "reactor_layer_roof.obj",
+	[6] = "reactor_complete.obj",
 }
 
 -- Pre-generated 80x16 atlas PNG (avoids [combine commas breaking model[] parsing)
@@ -162,9 +161,10 @@ local function build_page_intro(fs)
 	line("  " .. c(teal, "  1x") .. "  " .. c(white, "Fusion Power Output"))
 
 	y = y + 0.2
-	line(c(grey, "Pages 2-7: Layer-by-layer build guide"))
+	line(c(grey, "Pages 2-5: Layer-by-layer build guide"))
+	line(c(grey, "Page 6: Complete structure overview"))
+	line(c(grey, "Page 7: Control block placement"))
 	line(c(grey, "Page 8: Startup procedure"))
-	line(c(grey, "Page 9: Complete structure overview"))
 
 	return fs
 end
@@ -228,44 +228,28 @@ local function build_page_walls(fs)
 end
 
 -- ============================================================
--- PAGE 4: REACTOR CORE (zoomed center)
+-- PAGE 4: MIDDLE LAYER (merged core + plasma ring)
 -- ============================================================
 
-local function build_page_core(fs)
-	return build_model_page(fs, "Step 3: Reactor Core (Middle Layer Center)", 4, {
-		{color = "#cc44ff", label = "Pole Corrector", width = 2.2},
-		{color = "#e86400", label = "Pole Field", width = 1.8},
-		{color = "#00cccc", label = "Toroid Field", width = 2.0},
-		{color = "#888888", label = "Steel Block", width = 1.8},
-	}, {
-		"3x3 Pole Field ring with Pole Corrector at the exact center.",
-		"Steel Blocks connect the core to the outer Toroid walls.",
-	})
-end
-
--- ============================================================
--- PAGE 5: PLASMA RING (full middle layer)
--- ============================================================
-
-local function build_page_plasma(fs)
-	return build_model_page(fs, "Step 4: Plasma Ring (Middle Layer Full)", 5, {
+local function build_page_middle(fs)
+	return build_model_page(fs, "Step 3: Middle Layer (Core & Plasma Ring)", 4, {
 		{color = "#33cc33", label = "Plasma Field", width = 2.0},
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#cc44ff", label = "Corrector", width = 1.6},
 		{color = "#888888", label = "Steel Block", width = 1.8},
 	}, {
-		"Green plasma ring loops around the outside.",
-		"Steel Blocks fill the outer corners.",
+		"Pole Corrector at the exact center, surrounded by 3x3 Pole Field ring.",
+		"Green plasma ring loops around the outside. Steel Blocks fill corners.",
 	})
 end
 
 -- ============================================================
--- PAGE 6: ROOF
+-- PAGE 5: ROOF
 -- ============================================================
 
 local function build_page_roof(fs)
-	return build_model_page(fs, "Step 5: Roof (Top Layer)", 6, {
+	return build_model_page(fs, "Step 4: Roof (Top Layer)", 5, {
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#888888", label = "Steel Block", width = 1.8},
 	}, {
@@ -277,6 +261,7 @@ end
 -- PAGE 7: CONTROL BLOCKS (horizontal layout with side view)
 -- ============================================================
 
+
 local GRID_CONTROL = {
 	".T.",
 	".T.",
@@ -286,7 +271,7 @@ local GRID_CONTROL = {
 }
 
 local function build_page_controls(fs)
-	fs = page_header(fs, "Step 6: Control Panel, Jumpstarter & Power Output")
+	fs = page_header(fs, "Step 5: Control Panel, Jumpstarter & Power Output")
 
 	-- Horizontal row of 3 colored blocks
 	local box_w = 2.2
@@ -349,7 +334,7 @@ end
 -- ============================================================
 
 local function build_page_startup(fs)
-	fs = page_header(fs, "Step 7: Startup Procedure")
+	fs = page_header(fs, "Step 6: Startup Procedure")
 
 	local y = 1.5
 	local inc = 0.45
@@ -394,14 +379,14 @@ local function build_page_startup(fs)
 end
 
 -- ============================================================
--- PAGE 9: COMPLETE STRUCTURE — INTERACTIVE 3D MODEL
+-- PAGE 6: COMPLETE STRUCTURE — INTERACTIVE 3D MODEL
 -- ============================================================
 
 local function build_page_complete(fs)
 	fs = page_header(fs, "Complete Reactor \xe2\x80\x94 3D View")
 
 	-- Large interactive 3D model of the full reactor
-	fs = add_model(fs, 9, 0.3, 1.2, 8.4, 6.8, 25, -45)
+	fs = add_model(fs, 6, 0.3, 1.2, 8.4, 6.8, 25, -45)
 
 	-- Rotate hint
 	fs = fs .. "label[2.8,8.15;" .. minetest.colorize("#aaaaaa", "Click and drag to rotate the model") .. "]"
@@ -423,7 +408,7 @@ end
 -- FORMSPEC SHELL AND NAVIGATION
 -- ============================================================
 
-local PAGE_COUNT = 9
+local PAGE_COUNT = 8
 
 local function build_guide_page(page)
 	local fs = "formspec_version[4]"
@@ -435,12 +420,11 @@ local function build_guide_page(page)
 	if page == 1 then     fs = build_page_intro(fs)
 	elseif page == 2 then fs = build_page_floor(fs)
 	elseif page == 3 then fs = build_page_walls(fs)
-	elseif page == 4 then fs = build_page_core(fs)
-	elseif page == 5 then fs = build_page_plasma(fs)
-	elseif page == 6 then fs = build_page_roof(fs)
+	elseif page == 4 then fs = build_page_middle(fs)
+	elseif page == 5 then fs = build_page_roof(fs)
+	elseif page == 6 then fs = build_page_complete(fs)
 	elseif page == 7 then fs = build_page_controls(fs)
 	elseif page == 8 then fs = build_page_startup(fs)
-	elseif page == 9 then fs = build_page_complete(fs)
 	end
 
 	-- Page number (centered)
