@@ -5,6 +5,9 @@
 
 local CRAFT_COST = 10000
 
+-- Track which players have the formspec open, keyed by player_name
+local open_formspecs = {}  -- [player_name] = pos_string
+
 -- ============================================================
 -- REGISTERED 6×6 RECIPES
 -- ============================================================
@@ -144,13 +147,16 @@ local function update_craft(pos)
 		end
 	end
 
-	-- Refresh formspec
+	-- Refresh formspec ONLY for players who have it open
+	local pos_str = minetest.pos_to_string(pos)
 	local fs = build_crafting_formspec(pos)
-	local formname = "lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos)
-	local players = minetest.get_connected_players()
-	for _, p in ipairs(players) do
-		if vector.distance(p:get_pos(), pos) < 8 then
-			minetest.show_formspec(p:get_player_name(), formname, fs)
+	local formname = "lazarus_space:crafting6x6_" .. pos_str
+	for pname, open_pos in pairs(open_formspecs) do
+		if open_pos == pos_str then
+			local player = minetest.get_player_by_name(pname)
+			if player then
+				minetest.show_formspec(pname, formname, fs)
+			end
 		end
 	end
 end
@@ -246,7 +252,9 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 	on_rightclick = function(pos, node, clicker)
 		if not clicker:is_player() then return end
 		local fs = build_crafting_formspec(pos)
-		minetest.show_formspec(clicker:get_player_name(),
+		local pname = clicker:get_player_name()
+		open_formspecs[pname] = minetest.pos_to_string(pos)
+		minetest.show_formspec(pname,
 			"lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos), fs)
 	end,
 
@@ -315,15 +323,8 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 			.. stored .. " / " .. CRAFT_COST .. " EU"
 			.. (stored >= CRAFT_COST and " (Ready)" or ""))
 
-		-- Refresh formspec to show current EU status
-		local fs = build_crafting_formspec(pos)
-		local formname = "lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos)
-		local players = minetest.get_connected_players()
-		for _, p in ipairs(players) do
-			if vector.distance(p:get_pos(), pos) < 8 then
-				minetest.show_formspec(p:get_player_name(), formname, fs)
-			end
-		end
+		-- Re-check craft output in case EU status changed
+		update_craft(pos)
 	end,
 
 	technic_on_disable = function(pos, node)
@@ -335,6 +336,22 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 
 -- Register as HV machine
 technic.register_machine("HV", "lazarus_space:crafting_station_3d", technic.receiver)
+
+-- ============================================================
+-- FORMSPEC TRACKING CLEANUP
+-- ============================================================
+
+minetest.register_on_player_receive_fields(function(player, formname, fields)
+	local pos_str = formname:match("^lazarus_space:crafting6x6_(.+)$")
+	if not pos_str then return end
+	if fields.quit then
+		open_formspecs[player:get_player_name()] = nil
+	end
+end)
+
+minetest.register_on_leaveplayer(function(player)
+	open_formspecs[player:get_player_name()] = nil
+end)
 
 -- ============================================================
 -- CRAFTING RECIPE FOR THE STATION
