@@ -1,5 +1,6 @@
 -- Lazarus Space: Dimensional Jumpdrive
 -- Independent X/Y/Z radius control (1-15 each)
+-- Compatible with jumpdrive mod API (powerstorage, radius meta fields)
 
 local MAX_RADIUS = 15
 
@@ -8,21 +9,27 @@ local MAX_RADIUS = 15
 -- ============================================================
 
 local function build_jumpdrive_formspec(pos)
+	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 	local meta = minetest.get_meta(pos)
-	local stored = meta:get_int("stored_energy")
+	local stored = meta:get_int("powerstorage")
 	local rx = meta:get_int("radius_x")
 	local ry = meta:get_int("radius_y")
 	local rz = meta:get_int("radius_z")
+	local max_radius = math.max(rx, ry, rz)
 	local distance = vector.distance(pos, {
 		x = meta:get_int("x"),
 		y = meta:get_int("y"),
 		z = meta:get_int("z"),
 	})
-	local max_radius = math.max(rx, ry, rz)
-	local power_needed = math.floor(10 * distance * max_radius)
+	local power_needed
+	if jumpdrive and jumpdrive.calculate_power then
+		power_needed = jumpdrive.calculate_power(max_radius, distance)
+	else
+		power_needed = math.floor(10 * distance * max_radius)
+	end
 
 	local fs = "formspec_version[4]"
-		.. "size[12.4,14.0]"
+		.. "size[12.4,15.6]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -56,11 +63,22 @@ local function build_jumpdrive_formspec(pos)
 		"Power: ") .. minetest.colorize(power_color,
 		stored .. " / " .. power_needed .. " EU") .. "]"
 	fs = fs .. "label[0.4,5.96;" .. minetest.colorize("#aaaaaa",
+		"Effective radius: " .. max_radius
+		.. " (" .. rx .. "x" .. ry .. "x" .. rz .. ")") .. "]"
+	fs = fs .. "label[0.4,6.32;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
+	-- Fuel inventory (8 slots for burnable items)
+	fs = fs .. "label[0.4,6.8;" .. minetest.colorize("#aaaaaa", "Fuel:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.1;8,1;]"
+
 	-- Player inventory
-	fs = fs .. "list[current_player;main;0.4,6.6;8,1;]"
-		.. "list[current_player;main;0.4,7.85;8,3;8]"
+	fs = fs .. "list[current_player;main;0.4,8.4;8,1;]"
+		.. "list[current_player;main;0.4,9.65;8,3;8]"
+
+	-- Shift-click targets
+	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
+		.. "listring[current_player;main]"
 
 	return fs
 end
@@ -101,6 +119,12 @@ local function save_fields(pos, fields)
 		local v = clamp_radius(fields.radius_z)
 		if v then meta:set_int("radius_z", v) end
 	end
+
+	-- Sync single radius for jumpdrive API compatibility
+	local rx = meta:get_int("radius_x")
+	local ry = meta:get_int("radius_y")
+	local rz = meta:get_int("radius_z")
+	meta:set_int("radius", math.max(rx, ry, rz))
 end
 
 -- ============================================================
@@ -123,17 +147,21 @@ minetest.register_node("lazarus_space:jumpdrive", {
 
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
+		local inv = meta:get_inventory()
+		inv:set_size("main", 8)
 		meta:set_int("x", pos.x)
 		meta:set_int("y", pos.y)
 		meta:set_int("z", pos.z)
 		meta:set_int("radius_x", 5)
 		meta:set_int("radius_y", 5)
 		meta:set_int("radius_z", 5)
+		meta:set_int("radius", 5)  -- jumpdrive API reads this
 		meta:set_int("HV_EU_demand", 0)
 		meta:set_int("HV_EU_input", 0)
-		meta:set_int("stored_energy", 0)
+		meta:set_int("powerstorage", 0)  -- jumpdrive API reads this
 		meta:set_string("owner", "")
 		meta:set_string("infotext", "Dimensional Jumpdrive (not owned)")
+		minetest.get_node_timer(pos):start(1)
 	end,
 
 	after_place_node = function(pos, placer)
@@ -158,16 +186,70 @@ minetest.register_node("lazarus_space:jumpdrive", {
 			build_jumpdrive_formspec(pos))
 	end,
 
+	on_timer = function(pos, elapsed)
+		local meta = minetest.get_meta(pos)
+		local inv = meta:get_inventory()
+		local stored = meta:get_int("powerstorage")
+		local max_store = 1000000
+
+		if stored >= max_store then return true end
+
+		for i = 1, 8 do
+			local stack = inv:get_stack("main", i)
+			if not stack:is_empty() then
+				local fuel = minetest.get_craft_result({
+					method = "fuel",
+					width = 1,
+					items = {stack},
+				})
+				if fuel.time > 0 then
+					stack:take_item(1)
+					inv:set_stack("main", i, stack)
+					local power_gain = fuel.time * 100
+					stored = math.min(max_store, stored + power_gain)
+					meta:set_int("powerstorage", stored)
+					break  -- burn one item per tick
+				end
+			end
+		end
+
+		return true  -- keep timer running
+	end,
+
+	allow_metadata_inventory_put = function(pos, listname, index, stack, player)
+		local meta = minetest.get_meta(pos)
+		if meta:get_string("owner") ~= player:get_player_name() then
+			return 0
+		end
+		return stack:get_count()
+	end,
+
+	allow_metadata_inventory_take = function(pos, listname, index, stack, player)
+		local meta = minetest.get_meta(pos)
+		if meta:get_string("owner") ~= player:get_player_name() then
+			return 0
+		end
+		return stack:get_count()
+	end,
+
+	allow_metadata_inventory_move = function(pos, from_list, from_index, to_list, to_index, count, player)
+		local meta = minetest.get_meta(pos)
+		if meta:get_string("owner") ~= player:get_player_name() then
+			return 0
+		end
+		return count
+	end,
+
 	technic_run = function(pos, node)
 		local meta = minetest.get_meta(pos)
-		local stored = meta:get_int("stored_energy")
-		local max_store = 1000000  -- 1M EU max storage
+		local stored = meta:get_int("powerstorage")
+		local max_store = 1000000
 
 		if stored < max_store then
 			meta:set_int("HV_EU_demand", 10000)
 			local input = meta:get_int("HV_EU_input")
 			stored = math.min(max_store, stored + input)
-			meta:set_int("stored_energy", stored)
+			meta:set_int("powerstorage", stored)
 		else
 			meta:set_int("HV_EU_demand", 0)
 		end
@@ -222,15 +304,17 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local rx = meta:get_int("radius_x")
 		local ry = meta:get_int("radius_y")
 		local rz = meta:get_int("radius_z")
-		local tx = meta:get_int("x")
-		local ty = meta:get_int("y")
-		local tz = meta:get_int("z")
+		local max_radius = math.max(rx, ry, rz)
+
+		-- Sync single radius for jumpdrive API
+		meta:set_int("radius", max_radius)
 
 		if jumpdrive and jumpdrive.simulate_jump then
-			-- Set meta radius for jumpdrive API compatibility
-			meta:set_int("radius", math.max(rx, ry, rz))
 			jumpdrive.simulate_jump(pos, player, true)
 		else
+			local tx = meta:get_int("x")
+			local ty = meta:get_int("y")
+			local tz = meta:get_int("z")
 			minetest.chat_send_player(pname,
 				"Target: (" .. tx .. ", " .. ty .. ", " .. tz .. ") "
 				.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
@@ -245,39 +329,24 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local ry = meta:get_int("radius_y")
 		local rz = meta:get_int("radius_z")
 		local max_radius = math.max(rx, ry, rz)
-		local target = {
-			x = meta:get_int("x"),
-			y = meta:get_int("y"),
-			z = meta:get_int("z"),
-		}
-		local distance = vector.distance(pos, target)
-		local power_needed = math.floor(10 * distance * max_radius)
-		local stored = meta:get_int("stored_energy")
 
-		if stored < power_needed then
-			minetest.chat_send_player(pname,
-				"Insufficient power: " .. stored .. " / " .. power_needed .. " EU")
-			return
-		end
+		-- Set the single radius meta that jumpdrive API reads
+		meta:set_int("radius", max_radius)
 
 		if jumpdrive and jumpdrive.execute_jump then
-			-- Set meta radius to max of the three for jumpdrive API
-			meta:set_int("radius", max_radius)
+			-- execute_jump reads target from meta x,y,z
+			-- execute_jump reads radius from meta radius
+			-- execute_jump reads and consumes power from meta powerstorage
+			local success, result = jumpdrive.execute_jump(pos, player)
 
-			-- Consume power before jump
-			meta:set_int("stored_energy", stored - power_needed)
-
-			-- Execute jump through jumpdrive API
-			local success, time_ms = jumpdrive.execute_jump(pos, player)
 			if success then
+				-- Node has MOVED to target position — pos is now stale
 				minetest.chat_send_player(pname,
-					"Jump complete! (" .. (time_ms or "?") .. " ms)")
+					"Jump complete! (" .. (result or "?") .. " ms)")
 			else
-				-- Refund power on failure
-				local new_meta = minetest.get_meta(pos)
-				new_meta:set_int("stored_energy",
-					new_meta:get_int("stored_energy") + power_needed)
-				minetest.chat_send_player(pname, "Jump failed!")
+				-- Jump failed — node is still at old pos, power was not consumed
+				minetest.chat_send_player(pname,
+					"Jump failed: " .. tostring(result))
 			end
 		else
 			minetest.chat_send_player(pname,
