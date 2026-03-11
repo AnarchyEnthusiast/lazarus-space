@@ -5,13 +5,13 @@ Uses a single-material atlas UV approach: each cube face gets UV coordinates
 pointing to the correct slot in an 80x16 virtual atlas (5 slots of 16x16).
 The atlas is built at runtime using Minetest's [combine texture modifier
 with escaped commas (\\,) in the formspec, so no pre-generated atlas PNG
-is needed. This allows referencing default_steel_block.png directly from
-Minetest's default mod at runtime.
+is needed. This allows referencing technic_stainless_steel_block.png directly from
+the technic mod at runtime.
 
 Atlas layout (80x16, 5 slots of 16x16):
   Slot 0 (u=0.0-0.2):  lazarus_space_pole_field.png
   Slot 1 (u=0.2-0.4):  lazarus_space_toroid_field.png
-  Slot 2 (u=0.4-0.6):  default_steel_block.png (resolved from default mod)
+  Slot 2 (u=0.4-0.6):  technic_stainless_steel_block.png (resolved from technic mod)
   Slot 3 (u=0.6-0.8):  lazarus_space_plasma_field.png
   Slot 4 (u=0.8-1.0):  lazarus_space_pole_corrector.png
 
@@ -30,7 +30,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 SLOT_MAP = {
     "P": 0,   # pole field
     "T": 1,   # toroid field
-    "S": 2,   # steelblock
+    "S": 2,   # stainless steel
     "L": 3,   # plasma field
     "C": 3,   # plasma field corner (same texture)
     "*": 4,   # pole corrector

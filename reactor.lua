@@ -56,7 +56,7 @@ local TF  = "lazarus_space:toroid_field"
 local PLF = "lazarus_space:plasma_field"
 local PLC = "lazarus_space:plasma_field_corner"
 local PC  = "lazarus_space:pole_corrector"
-local SB  = "default:steelblock"
+local SB  = "technic:stainless_steel_block"
 local AIR = "air"
 
 -- ---- Tier 1 structure: 9x9x5 (157 entries) ----

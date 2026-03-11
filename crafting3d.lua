@@ -1,7 +1,7 @@
--- Lazarus Space: Advanced Crafting Machine (6×6 Grid)
--- 36-slot crafting grid for advanced recipes.
+-- Lazarus Space: Advanced Crafting Machine (5×5 Grid)
+-- 25-slot crafting grid for advanced recipes.
 -- Also functions as a normal 3×3 crafting table.
--- 6×6 recipes require 10,000 EU from HV network.
+-- 5×5 recipes require 10,000 EU from HV network.
 
 local CRAFT_COST = 10000
 
@@ -9,15 +9,15 @@ local CRAFT_COST = 10000
 local open_formspecs = {}  -- [player_name] = pos_string
 
 -- ============================================================
--- REGISTERED 6×6 RECIPES
+-- REGISTERED 5×5 RECIPES
 -- ============================================================
 
-local recipes_6x6 = {}
+local recipes_5x5 = {}
 
 lazarus_space.register_6x6_craft = function(def)
-	recipes_6x6[#recipes_6x6 + 1] = {
+	recipes_5x5[#recipes_5x5 + 1] = {
 		output = def.output,
-		recipe = def.recipe,  -- flat table of 36 strings (6 rows × 6 cols)
+		recipe = def.recipe,  -- flat table of 25 strings (5 rows × 5 cols)
 	}
 end
 
@@ -41,9 +41,9 @@ local function item_matches(pattern, item_name)
 end
 
 lazarus_space.find_6x6_craft = function(grid)
-	for _, recipe in ipairs(recipes_6x6) do
+	for _, recipe in ipairs(recipes_5x5) do
 		local match = true
-		for i = 1, 36 do
+		for i = 1, 25 do
 			if not item_matches(recipe.recipe[i] or "", grid[i]) then
 				match = false
 				break
@@ -61,11 +61,11 @@ end
 -- ============================================================
 
 local function try_normal_craft(inv)
-	-- Find bounding box of non-empty slots in the 6×6 grid
-	local min_row, max_row, min_col, max_col = 7, 0, 7, 0
-	for row = 1, 6 do
-		for col = 1, 6 do
-			local idx = (row - 1) * 6 + col
+	-- Find bounding box of non-empty slots in the 5×5 grid
+	local min_row, max_row, min_col, max_col = 6, 0, 6, 0
+	for row = 1, 5 do
+		for col = 1, 5 do
+			local idx = (row - 1) * 5 + col
 			local stack = inv:get_stack("craft", idx)
 			if not stack:is_empty() then
 				min_row = math.min(min_row, row)
@@ -89,7 +89,7 @@ local function try_normal_craft(inv)
 	local items = {}
 	for row = min_row, min_row + height - 1 do
 		for col = min_col, min_col + width - 1 do
-			local idx = (row - 1) * 6 + col
+			local idx = (row - 1) * 5 + col
 			items[#items + 1] = inv:get_stack("craft", idx)
 		end
 	end
@@ -117,20 +117,20 @@ local function update_craft(pos)
 	local meta = minetest.get_meta(pos)
 	local inv = meta:get_inventory()
 
-	-- Build flat grid for 6×6 recipe check
+	-- Build flat grid for 5×5 recipe check
 	local grid = {}
-	for i = 1, 36 do
+	for i = 1, 25 do
 		local stack = inv:get_stack("craft", i)
 		grid[i] = stack:get_name()
 	end
 
-	-- Try 6×6 custom recipes first (requires EU)
+	-- Try 5×5 custom recipes first (requires EU)
 	local result = lazarus_space.find_6x6_craft(grid)
 	if result then
 		local stored = meta:get_int("stored_energy")
 		if stored >= CRAFT_COST then
 			inv:set_stack("output", 1, result)
-			meta:set_string("craft_type", "6x6")
+			meta:set_string("craft_type", "5x5")
 		else
 			inv:set_stack("output", 1, "")
 			meta:set_string("craft_type", "")
@@ -171,45 +171,45 @@ build_crafting_formspec = function(pos)
 	local stored = meta:get_int("stored_energy")
 
 	local fs = "formspec_version[4]"
-		.. "size[14.4,15.6]"
+		.. "size[12.8,14.4]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
 	-- Title bar
-	fs = fs .. "box[0,0;14.4,0.8;#1a1a2e]"
-		.. "label[4.0,0.16;" .. minetest.colorize("#00ccaa",
+	fs = fs .. "box[0,0;12.8,0.8;#1a1a2e]"
+		.. "label[3.4,0.16;" .. minetest.colorize("#00ccaa",
 		"Advanced Crafting Machine") .. "]"
 
 	-- Background panel for crafting area
-	fs = fs .. "box[0.3,1.1;8.4,8.2;#0a0a12]"
+	fs = fs .. "box[0.3,1.1;7.0,7.0;#0a0a12]"
 
-	-- 6×6 crafting grid
+	-- 5×5 crafting grid
 	local grid_x = 0.6
 	local grid_y = 1.4
 	fs = fs .. "list[nodemeta:" .. pos_str .. ";craft;"
-		.. grid_x .. "," .. grid_y .. ";6,6;]"
+		.. grid_x .. "," .. grid_y .. ";5,5;]"
 
 	-- EU status display (between grid and output)
 	local eu_color = stored >= CRAFT_COST and "#00ff66" or "#ff3333"
 	local eu_label = stored >= CRAFT_COST and "CHARGED" or (stored .. " / " .. CRAFT_COST .. " EU")
-	fs = fs .. "label[9.2,3.6;" .. minetest.colorize("#aaaaaa", "HV Power:") .. "]"
-	fs = fs .. "label[9.2,3.96;" .. minetest.colorize(eu_color, eu_label) .. "]"
+	fs = fs .. "label[7.8,3.2;" .. minetest.colorize("#aaaaaa", "HV Power:") .. "]"
+	fs = fs .. "label[7.8,3.56;" .. minetest.colorize(eu_color, eu_label) .. "]"
 
 	-- Arrow
-	fs = fs .. "image[9.2,4.6;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
+	fs = fs .. "image[7.8,4.2;1.2,1.2;gui_furnace_arrow_bg.png^[transformR270]"
 
 	-- Output slot
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;10.8,4.6;1,1;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";output;9.4,4.2;1,1;]"
 
 	-- Normal crafting label
-	fs = fs .. "label[9.2,6.4;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[7.8,5.8;" .. minetest.colorize("#aaaaaa",
 		"Also accepts") .. "]"
-	fs = fs .. "label[9.2,6.76;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[7.8,6.16;" .. minetest.colorize("#aaaaaa",
 		"normal recipes") .. "]"
 
 	-- Player inventory — all 4 rows must be visible
-	fs = fs .. "list[current_player;main;0.6,10.0;8,1;]"
-		.. "list[current_player;main;0.6,11.25;8,3;8]"
+	fs = fs .. "list[current_player;main;0.6,8.8;8,1;]"
+		.. "list[current_player;main;0.6,10.05;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";craft]"
@@ -240,7 +240,7 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		inv:set_size("craft", 36)
+		inv:set_size("craft", 25)
 		inv:set_size("output", 1)
 		meta:set_int("HV_EU_demand", 0)
 		meta:set_int("HV_EU_input", 0)
@@ -266,12 +266,12 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 			local inv = meta:get_inventory()
 			local craft_type = meta:get_string("craft_type")
 
-			if craft_type == "6x6" then
+			if craft_type == "5x5" then
 				-- Consume 10,000 EU
 				local stored = meta:get_int("stored_energy")
 				meta:set_int("stored_energy", math.max(0, stored - CRAFT_COST))
 				-- Consume one of each input
-				for i = 1, 36 do
+				for i = 1, 25 do
 					local s = inv:get_stack("craft", i)
 					if not s:is_empty() then
 						s:take_item(1)
@@ -285,7 +285,7 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 					local dec_idx = 1
 					for row = start_row, start_row + height - 1 do
 						for col = start_col, start_col + width - 1 do
-							local grid_idx = (row - 1) * 6 + col
+							local grid_idx = (row - 1) * 5 + col
 							inv:set_stack("craft", grid_idx, decremented.items[dec_idx])
 							dec_idx = dec_idx + 1
 						end
@@ -360,14 +360,14 @@ end)
 minetest.register_craft({
 	output = "lazarus_space:crafting_station_3d",
 	recipe = {
-		{"default:steelblock", "lazarus_space:pole_field", "default:steelblock"},
+		{"technic:stainless_steel_block", "lazarus_space:pole_field", "technic:stainless_steel_block"},
 		{"lazarus_space:pole_field", "default:diamondblock", "lazarus_space:pole_field"},
-		{"default:steelblock", "lazarus_space:pole_field", "default:steelblock"},
+		{"technic:stainless_steel_block", "lazarus_space:pole_field", "technic:stainless_steel_block"},
 	},
 })
 
 -- ============================================================
--- 6×6 CRAFTING RECIPES
+-- 5×5 CRAFTING RECIPES
 -- ============================================================
 
 -- Diamond cross: 2×2 diamonds in center → diamond block
@@ -375,55 +375,49 @@ lazarus_space.register_6x6_craft({
 	output = "default:diamondblock",
 	recipe = {
 		-- Row 1
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 		-- Row 2
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 		-- Row 3
-		"", "", "default:diamond", "default:diamond", "", "",
+		"", "default:diamond", "default:diamond", "", "",
 		-- Row 4
-		"", "", "default:diamond", "default:diamond", "", "",
+		"", "default:diamond", "default:diamond", "", "",
 		-- Row 5
-		"", "", "", "", "", "",
-		-- Row 6
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 	},
 })
 
--- Steel frame: steel ingots forming outer ring of 4×4 area → 2 steel blocks
+-- Steel frame: steel ingots forming outer ring of 3×3 area → 2 stainless steel blocks
 lazarus_space.register_6x6_craft({
-	output = "default:steelblock 2",
+	output = "technic:stainless_steel_block 2",
 	recipe = {
 		-- Row 1
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 		-- Row 2
-		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
+		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
 		-- Row 3
-		"", "default:steel_ingot", "",                    "",                    "default:steel_ingot", "",
+		"", "default:steel_ingot", "", "default:steel_ingot", "",
 		-- Row 4
-		"", "default:steel_ingot", "",                    "",                    "default:steel_ingot", "",
+		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
 		-- Row 5
-		"", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "default:steel_ingot", "",
-		-- Row 6
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 	},
 })
 
--- Pole field assembly: corrector in center with steel plus pattern → 4 pole field
+-- Pole field assembly: corrector in center with stainless steel plus pattern → 4 pole field
 lazarus_space.register_6x6_craft({
 	output = "lazarus_space:pole_field 4",
 	recipe = {
 		-- Row 1
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 		-- Row 2
-		"", "", "", "default:steelblock", "", "",
+		"", "", "technic:stainless_steel_block", "", "",
 		-- Row 3
-		"", "", "default:steelblock", "lazarus_space:pole_corrector", "default:steelblock", "",
+		"", "technic:stainless_steel_block", "lazarus_space:pole_corrector", "technic:stainless_steel_block", "",
 		-- Row 4
-		"", "", "", "default:steelblock", "", "",
+		"", "", "technic:stainless_steel_block", "", "",
 		-- Row 5
-		"", "", "", "", "", "",
-		-- Row 6
-		"", "", "", "", "", "",
+		"", "", "", "", "",
 	},
 })
 
@@ -431,22 +425,20 @@ lazarus_space.register_6x6_craft({
 -- TEST RECIPE (placeholder for development)
 -- ============================================================
 
--- 6×6 dirt ring → mese block
--- Ring of dirt around the border of the 6×6 grid
+-- 5×5 dirt ring → mese block
+-- Ring of dirt around the border of the 5×5 grid
 lazarus_space.register_6x6_craft({
 	output = "default:mese",
 	recipe = {
 		-- Row 1: full top row
-		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
+		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
 		-- Row 2: sides only
-		"default:dirt", "", "", "", "", "default:dirt",
+		"default:dirt", "", "", "", "default:dirt",
 		-- Row 3: sides only
-		"default:dirt", "", "", "", "", "default:dirt",
+		"default:dirt", "", "", "", "default:dirt",
 		-- Row 4: sides only
-		"default:dirt", "", "", "", "", "default:dirt",
-		-- Row 5: sides only
-		"default:dirt", "", "", "", "", "default:dirt",
-		-- Row 6: full bottom row
-		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
+		"default:dirt", "", "", "", "default:dirt",
+		-- Row 5: full bottom row
+		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
 	},
 })

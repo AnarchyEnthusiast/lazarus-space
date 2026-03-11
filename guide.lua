@@ -32,7 +32,7 @@ end
 local GRID_COLORS = {
 	P = "#e86400",     -- pole field (orange)
 	T = "#00cccc",     -- toroid field (cyan)
-	S = "#888888",     -- steelblock (grey)
+	S = "#b0b0b8",     -- stainless steel (light grey)
 	L = "#33cc33",     -- plasma field (green)
 	C = "#33cc33",     -- plasma field corner (same green)
 	["*"] = "#cc44ff", -- pole corrector (magenta/purple)
@@ -150,7 +150,7 @@ local TIER_INFO = {
 local MODEL_TEXTURE = "[combine:80x16"
 	.. ":0\\,0=lazarus_space_pole_field.png"
 	.. ":16\\,0=lazarus_space_toroid_field.png"
-	.. ":32\\,0=default_steel_block.png"
+	.. ":32\\,0=technic_stainless_steel_block.png"
 	.. ":48\\,0=lazarus_space_plasma_field.png"
 	.. ":64\\,0=lazarus_space_pole_corrector.png"
 
@@ -203,7 +203,7 @@ local function build_tier_intro(fs, tab)
 	local b = tier.blocks
 	line("  " .. c(teal, string.format("%3d", b.pf)) .. "x  " .. c(white, "Pole Field"))
 	line("  " .. c(teal, string.format("%3d", b.tf)) .. "x  " .. c(white, "Toroid Field"))
-	line("  " .. c(teal, string.format("%3d", b.sb)) .. "x  " .. c(white, "Steel Block"))
+	line("  " .. c(teal, string.format("%3d", b.sb)) .. "x  " .. c(white, "Stainless Steel"))
 	line("  " .. c(teal, string.format("%3d", b.plf)) .. "x  " .. c(white, "Plasma Field"))
 	line("  " .. c(teal, "  1") .. "x  " .. c(white, "Pole Corrector"))
 	line("  " .. c(teal, "  1") .. "x  " .. c(white, "Fusion Control Panel"))
@@ -249,13 +249,13 @@ local LAYER_LEGENDS = {
 	-- 1: Floor
 	{
 		{color = "#e86400", label = "Pole Field", width = 1.8},
-		{color = "#888888", label = "Steel Block", width = 1.8},
+		{color = "#b0b0b8", label = "Stainless Steel", width = 2.4},
 	},
 	-- 2: Walls
 	{
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
-		{color = "#888888", label = "Steel Block", width = 1.8},
+		{color = "#b0b0b8", label = "Stainless Steel", width = 2.4},
 	},
 	-- 3: Middle
 	{
@@ -263,12 +263,12 @@ local LAYER_LEGENDS = {
 		{color = "#00cccc", label = "Toroid Field", width = 2.0},
 		{color = "#e86400", label = "Pole Field", width = 1.8},
 		{color = "#cc44ff", label = "Corrector", width = 1.6},
-		{color = "#888888", label = "Steel Block", width = 1.8},
+		{color = "#b0b0b8", label = "Stainless Steel", width = 2.4},
 	},
 	-- 4: Roof
 	{
 		{color = "#e86400", label = "Pole Field", width = 1.8},
-		{color = "#888888", label = "Steel Block", width = 1.8},
+		{color = "#b0b0b8", label = "Stainless Steel", width = 2.4},
 	},
 	-- 5: Complete
 	{
@@ -276,7 +276,7 @@ local LAYER_LEGENDS = {
 		{color = "#00cccc", label = "Toroid", width = 1.3},
 		{color = "#33cc33", label = "Plasma", width = 1.3},
 		{color = "#cc44ff", label = "Corrector", width = 1.6},
-		{color = "#888888", label = "Steel", width = 1.2},
+		{color = "#b0b0b8", label = "SS Steel", width = 1.5},
 	},
 }
 
@@ -292,7 +292,7 @@ local LAYER_NOTES = {
 	function(t)
 		return {
 			t.size:sub(1, t.size:find("x") - 1) .. "x" .. t.size:sub(1, t.size:find("x") - 1)
-				.. " square border of Pole Field with a Steel Block",
+				.. " square border of Pole Field with a Stainless Steel",
 			"cross and corner bolts inside. Build this layer first.",
 		}
 	end,
@@ -305,12 +305,12 @@ local LAYER_NOTES = {
 	function(_)
 		return {
 			"Pole Corrector at the exact center, surrounded by Pole Field ring.",
-			"Green plasma ring loops around the outside. Steel Blocks at corners.",
+			"Green plasma ring loops around the outside. Stainless Steel at corners.",
 		}
 	end,
 	function(_)
 		return {
-			"Mirrors the base \xe2\x80\x94 Pole Field border with corner Steel Blocks.",
+			"Mirrors the base \xe2\x80\x94 Pole Field border with corner Stainless Steel.",
 		}
 	end,
 	function(t)
