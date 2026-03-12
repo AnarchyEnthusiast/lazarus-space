@@ -128,6 +128,57 @@ local function save_fields(pos, fields)
 end
 
 -- ============================================================
+-- VISUALIZATION: particle box outline
+-- ============================================================
+
+local function draw_particle_box(pos1, pos2, color, player_name, duration)
+	duration = duration or 5
+	local particles_per_edge = 10
+
+	local x1, y1, z1 = pos1.x - 0.5, pos1.y - 0.5, pos1.z - 0.5
+	local x2, y2, z2 = pos2.x + 0.5, pos2.y + 0.5, pos2.z + 0.5
+
+	local edges = {
+		-- Bottom face (y1)
+		{{x1,y1,z1}, {x2,y1,z1}},
+		{{x2,y1,z1}, {x2,y1,z2}},
+		{{x2,y1,z2}, {x1,y1,z2}},
+		{{x1,y1,z2}, {x1,y1,z1}},
+		-- Top face (y2)
+		{{x1,y2,z1}, {x2,y2,z1}},
+		{{x2,y2,z1}, {x2,y2,z2}},
+		{{x2,y2,z2}, {x1,y2,z2}},
+		{{x1,y2,z2}, {x1,y2,z1}},
+		-- Vertical edges
+		{{x1,y1,z1}, {x1,y2,z1}},
+		{{x2,y1,z1}, {x2,y2,z1}},
+		{{x2,y1,z2}, {x2,y2,z2}},
+		{{x1,y1,z2}, {x1,y2,z2}},
+	}
+
+	for _, edge in ipairs(edges) do
+		local a, b = edge[1], edge[2]
+		for i = 0, particles_per_edge do
+			local t = i / particles_per_edge
+			minetest.add_particle({
+				pos = {
+					x = a[1] + (b[1] - a[1]) * t,
+					y = a[2] + (b[2] - a[2]) * t,
+					z = a[3] + (b[3] - a[3]) * t,
+				},
+				velocity = {x = 0, y = 0, z = 0},
+				acceleration = {x = 0, y = 0, z = 0},
+				expirationtime = duration,
+				size = 2,
+				glow = 14,
+				texture = "lazarus_space_particle_white.png^[colorize:" .. color .. ":255",
+				playername = player_name,
+			})
+		end
+	end
+end
+
+-- ============================================================
 -- NODE REGISTRATION
 -- ============================================================
 
@@ -184,6 +235,30 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		minetest.show_formspec(clicker:get_player_name(),
 			"lazarus_space:jumpdrive_" .. minetest.pos_to_string(pos),
 			build_jumpdrive_formspec(pos))
+	end,
+
+	on_punch = function(pos, node, puncher, pointed_thing)
+		if not puncher or not puncher:is_player() then return end
+		local meta = minetest.get_meta(pos)
+		local pname = puncher:get_player_name()
+
+		if meta:get_string("owner") ~= pname then return end
+
+		local wielded = puncher:get_wielded_item()
+		if not wielded:is_empty() then return end
+
+		local rx = meta:get_int("radius_x")
+		local ry = meta:get_int("radius_y")
+		local rz = meta:get_int("radius_z")
+
+		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+
+		draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 5)
+
+		minetest.chat_send_player(pname,
+			"Radius: " .. rx .. "x" .. ry .. "x" .. rz
+			.. " | Area: " .. (rx*2+1) .. "x" .. (ry*2+1) .. "x" .. (rz*2+1) .. " blocks")
 	end,
 
 	on_timer = function(pos, elapsed)
@@ -305,20 +380,48 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local ry = meta:get_int("radius_y")
 		local rz = meta:get_int("radius_z")
 		local max_radius = math.max(rx, ry, rz)
-
-		-- Sync single radius for jumpdrive API
 		meta:set_int("radius", max_radius)
 
-		if jumpdrive and jumpdrive.simulate_jump then
-			jumpdrive.simulate_jump(pos, player, true)
+		local tx = meta:get_int("x")
+		local ty = meta:get_int("y")
+		local tz = meta:get_int("z")
+		local target = {x = tx, y = ty, z = tz}
+		local distance = vector.distance(pos, target)
+
+		-- Source area (using independent XYZ radii)
+		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+
+		-- Target area (same dimensions, shifted)
+		local offset = vector.subtract(target, pos)
+		local target_pos1 = vector.add(source_pos1, offset)
+		local target_pos2 = vector.add(source_pos2, offset)
+
+		-- Draw source box (green) and target box (blue)
+		draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 8)
+		draw_particle_box(target_pos1, target_pos2, "#4488ff", pname, 8)
+
+		-- Calculate power
+		local power_needed
+		if jumpdrive and jumpdrive.calculate_power then
+			power_needed = jumpdrive.calculate_power(max_radius, distance)
 		else
-			local tx = meta:get_int("x")
-			local ty = meta:get_int("y")
-			local tz = meta:get_int("z")
-			minetest.chat_send_player(pname,
-				"Target: (" .. tx .. ", " .. ty .. ", " .. tz .. ") "
-				.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
+			power_needed = math.floor(10 * distance * max_radius)
 		end
+		local stored = meta:get_int("powerstorage")
+
+		local power_status = stored >= power_needed and "OK" or "INSUFFICIENT"
+		minetest.chat_send_player(pname,
+			"Source: (" .. source_pos1.x .. "," .. source_pos1.y .. "," .. source_pos1.z
+			.. ") to (" .. source_pos2.x .. "," .. source_pos2.y .. "," .. source_pos2.z .. ")")
+		minetest.chat_send_player(pname,
+			"Target: (" .. target_pos1.x .. "," .. target_pos1.y .. "," .. target_pos1.z
+			.. ") to (" .. target_pos2.x .. "," .. target_pos2.y .. "," .. target_pos2.z .. ")")
+		minetest.chat_send_player(pname,
+			"Distance: " .. math.floor(distance) .. " blocks | "
+			.. "Power: " .. stored .. "/" .. power_needed .. " EU (" .. power_status .. ") | "
+			.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
+
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
 	elseif fields.jump then
