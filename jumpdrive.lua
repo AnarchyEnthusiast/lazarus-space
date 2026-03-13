@@ -155,7 +155,7 @@ local function build_jumpdrive_formspec(pos)
 	end
 
 	local fs = "formspec_version[4]"
-		.. "size[12.4,14.6]"
+		.. "size[12.4,14.96]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -196,15 +196,26 @@ local function build_jumpdrive_formspec(pos)
 	fs = fs .. "label[0.4,6.72;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
+	-- Blanket status
+	local blanket_active = meta:get_int("blanket_mode") == 1
+	if blanket_active then
+		local bcount = meta:get_int("blanket_count")
+		fs = fs .. "label[0.4,7.08;" .. minetest.colorize("#ffaa00",
+			"Blanket: ACTIVE (" .. bcount .. " blocks)") .. "]"
+	else
+		fs = fs .. "label[0.4,7.08;" .. minetest.colorize("#666666",
+			"Blanket: OFF") .. "]"
+	end
+
 	-- Books (4 slots) and Upgrades (4 slots) on one line with gap
-	fs = fs .. "label[0.4,7.2;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
-	fs = fs .. "label[6.8,7.2;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.5;4,1;]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.5;4,1;]"
+	fs = fs .. "label[0.4,7.56;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+	fs = fs .. "label[6.8,7.56;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.86;4,1;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.86;4,1;]"
 
 	-- Player inventory — all 4 rows
-	fs = fs .. "list[current_player;main;0.4,8.8;8,1;]"
-		.. "list[current_player;main;0.4,10.05;8,3;8]"
+	fs = fs .. "list[current_player;main;0.4,9.16;8,1;]"
+		.. "list[current_player;main;0.4,10.41;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
@@ -308,6 +319,53 @@ local function draw_particle_box(pos1, pos2, color, player_name, duration)
 			})
 		end
 	end
+end
+
+-- ============================================================
+-- BLANKET SCAN: highlight non-air blocks in radius with particles
+-- ============================================================
+
+local function scan_blanket(pos, player_name)
+	local meta = minetest.get_meta(pos)
+	local rx = meta:get_int("radius_x")
+	local ry = meta:get_int("radius_y")
+	local rz = meta:get_int("radius_z")
+
+	local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+	local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+
+	local c_air = minetest.get_content_id("air")
+	local c_ignore = minetest.get_content_id("ignore")
+
+	local vm = minetest.get_voxel_manip(src1, src2)
+	local emin, emax = vm:get_emerged_area()
+	local data = vm:get_data()
+	local va = VoxelArea:new({MinEdge = emin, MaxEdge = emax})
+
+	local count = 0
+	for z = src1.z, src2.z do
+	for y = src1.y, src2.y do
+	for x = src1.x, src2.x do
+		local i = va:index(x, y, z)
+		if data[i] ~= c_air and data[i] ~= c_ignore then
+			count = count + 1
+			minetest.add_particle({
+				pos = {x = x, y = y + 0.5, z = z},
+				velocity = {x = 0, y = 0.1, z = 0},
+				acceleration = {x = 0, y = 0, z = 0},
+				expirationtime = 8,
+				size = 3,
+				glow = 14,
+				texture = "lazarus_space_particle_white.png^[colorize:#ffaa00:200",
+				playername = player_name,
+			})
+		end
+	end end end
+
+	meta:set_int("blanket_mode", 1)
+	meta:set_int("blanket_count", count)
+
+	return count
 end
 
 -- ============================================================
@@ -451,6 +509,8 @@ local function execute_blanket_jump(pos, player)
 	local new_pos = vector.add(pos, offset)
 	local new_meta = minetest.get_meta(new_pos)
 	new_meta:set_int("powerstorage", stored - power_needed)
+	new_meta:set_int("blanket_mode", 0)
+	new_meta:set_int("blanket_count", 0)
 
 	-- Phase 7: Invalidate technic networks at both locations
 	if technic.pos2network and technic.remove_network then
@@ -504,6 +564,8 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		meta:set_int("HV_EU_input", 0)
 		meta:set_int("powerstorage", 0)
 		meta:set_int("max_powerstorage", BASE_MAX_POWER)
+		meta:set_int("blanket_mode", 0)
+		meta:set_int("blanket_count", 0)
 		meta:set_string("owner", "")
 		meta:set_string("infotext", "Dimensional Jumpdrive (not owned)")
 	end,
@@ -705,12 +767,16 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 
 	if fields.save then
 		save_fields(pos, fields)
+		meta:set_int("blanket_mode", 0)
+		meta:set_int("blanket_count", 0)
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
 	elseif fields.reset then
 		meta:set_int("x", pos.x)
 		meta:set_int("y", pos.y)
 		meta:set_int("z", pos.z)
+		meta:set_int("blanket_mode", 0)
+		meta:set_int("blanket_count", 0)
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
 	elseif fields.write_book then
@@ -775,56 +841,59 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
+	elseif fields.blanket then
+		save_fields(pos, fields)
+		local rx = meta:get_int("radius_x")
+		local ry = meta:get_int("radius_y")
+		local rz = meta:get_int("radius_z")
+		meta:set_int("radius", math.max(rx, ry, rz))
+
+		local count = scan_blanket(pos, pname)
+
+		minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
+			"Blanket scan: " .. count .. " blocks selected — press Jump to move them"))
+
+		-- Draw orange box outline around the full radius for reference
+		local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+		local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+		draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
+
 	elseif fields.jump then
-		-- Save fields first
 		save_fields(pos, fields)
 
 		local rx = meta:get_int("radius_x")
 		local ry = meta:get_int("radius_y")
 		local rz = meta:get_int("radius_z")
 		local max_radius = math.max(rx, ry, rz)
-
-		-- Set the single radius meta that jumpdrive API reads
 		meta:set_int("radius", max_radius)
 
-		if jumpdrive and jumpdrive.execute_jump then
-			-- execute_jump reads target from meta x,y,z
-			-- execute_jump reads radius from meta radius
-			-- execute_jump reads and consumes power from meta powerstorage
-			local success, result = jumpdrive.execute_jump(pos, player)
+		local blanket_active = meta:get_int("blanket_mode") == 1
 
+		if blanket_active then
+			-- Blanket jump: non-air blocks only
+			local success = execute_blanket_jump(pos, player)
 			if success then
-				-- Node has MOVED to target position — pos is now stale
-				minetest.chat_send_player(pname,
-					"Jump complete! (" .. (result or "?") .. " ms)")
+				minetest.close_formspec(pname, formname)
 			else
-				-- Jump failed — node is still at old pos, power was not consumed
-				minetest.chat_send_player(pname,
-					"Jump failed: " .. tostring(result))
+				minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 			end
 		else
-			minetest.chat_send_player(pname,
-				"Jumpdrive mod not available — cannot execute jump")
-		end
-
-	elseif fields.blanket then
-		-- Blanket jump: move non-air blocks only
-		save_fields(pos, fields)
-
-		local rx = meta:get_int("radius_x")
-		local ry = meta:get_int("radius_y")
-		local rz = meta:get_int("radius_z")
-		local max_radius = math.max(rx, ry, rz)
-		meta:set_int("radius", max_radius)
-
-		local success = execute_blanket_jump(pos, player)
-
-		if success then
-			-- Node has MOVED — pos is stale, close formspec
-			minetest.close_formspec(pname, formname)
-		else
-			-- Jump failed — node still at old pos, refresh formspec
-			minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
+			-- Normal jump via jumpdrive API
+			if jumpdrive and jumpdrive.execute_jump then
+				local success, result = jumpdrive.execute_jump(pos, player)
+				if success then
+					minetest.chat_send_player(pname,
+						"Jump complete! (" .. (result or "?") .. " ms)")
+				else
+					minetest.chat_send_player(pname,
+						"Jump failed: " .. tostring(result))
+				end
+			else
+				minetest.chat_send_player(pname,
+					"Jumpdrive mod not available — cannot execute jump")
+			end
 		end
 	end
 end)
