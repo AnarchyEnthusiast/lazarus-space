@@ -155,7 +155,7 @@ local function build_jumpdrive_formspec(pos)
 	end
 
 	local fs = "formspec_version[4]"
-		.. "size[12.4,17.2]"
+		.. "size[12.4,14.8]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -165,50 +165,45 @@ local function build_jumpdrive_formspec(pos)
 		"Dimensional Jumpdrive") .. "]"
 
 	-- Target coordinates
-	fs = fs .. "label[0.4,1.2;" .. minetest.colorize("#aaaaaa", "Target Coordinates:") .. "]"
-	fs = fs .. "field[0.4,1.5;3.4,0.8;x;X;" .. meta:get_int("x") .. "]"
-	fs = fs .. "field[4.2,1.5;3.4,0.8;y;Y;" .. meta:get_int("y") .. "]"
-	fs = fs .. "field[8.0,1.5;3.4,0.8;z;Z;" .. meta:get_int("z") .. "]"
+	fs = fs .. "field[0.4,1.2;3.4,0.8;x;Target X;" .. meta:get_int("x") .. "]"
+	fs = fs .. "field[4.2,1.2;3.4,0.8;y;Target Y;" .. meta:get_int("y") .. "]"
+	fs = fs .. "field[8.0,1.2;3.4,0.8;z;Target Z;" .. meta:get_int("z") .. "]"
 
 	-- Radius controls
-	fs = fs .. "label[0.4,2.8;" .. minetest.colorize("#aaaaaa",
-		"Jump Radius (1-" .. MAX_RADIUS .. "):") .. "]"
-	fs = fs .. "field[0.4,3.1;3.4,0.8;radius_x;Radius X;" .. rx .. "]"
-	fs = fs .. "field[4.2,3.1;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
-	fs = fs .. "field[8.0,3.1;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
+	fs = fs .. "field[0.4,2.6;3.4,0.8;radius_x;Radius X (1-" .. MAX_RADIUS .. ");" .. rx .. "]"
+	fs = fs .. "field[4.2,2.6;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
+	fs = fs .. "field[8.0,2.6;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
 
 	-- Action buttons (row 1)
-	fs = fs .. "button[0.4,4.4;2.6,0.8;jump;Jump]"
-	fs = fs .. "button[3.4,4.4;2.6,0.8;show;Show]"
-	fs = fs .. "button[6.4,4.4;2.6,0.8;save;Save]"
-	fs = fs .. "button[9.4,4.4;2.6,0.8;reset;Reset]"
+	fs = fs .. "button[0.4,3.8;2.6,0.8;jump;Jump]"
+	fs = fs .. "button[3.4,3.8;2.6,0.8;show;Show]"
+	fs = fs .. "button[6.4,3.8;2.6,0.8;save;Save]"
+	fs = fs .. "button[9.4,3.8;2.6,0.8;reset;Reset]"
 
 	-- Book buttons (row 2)
-	fs = fs .. "button[0.4,5.4;5.4,0.8;write_book;Write to Book]"
-	fs = fs .. "button[6.2,5.4;5.4,0.8;read_book;Read from Book]"
+	fs = fs .. "button[0.4,4.8;5.4,0.8;write_book;Write to Book]"
+	fs = fs .. "button[6.2,4.8;5.4,0.8;read_book;Read from Book]"
 
 	-- Power status
 	local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-	fs = fs .. "label[0.4,6.6;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,5.6;" .. minetest.colorize("#aaaaaa",
 		"Power: ") .. minetest.colorize(power_color,
 		stored .. " / " .. power_needed .. " EU") .. "]"
-	fs = fs .. "label[0.4,6.96;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,5.96;" .. minetest.colorize("#aaaaaa",
 		"Storage: " .. stored .. " / " .. max_store .. " EU"
 		.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
-	fs = fs .. "label[0.4,7.32;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.32;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
-	-- Main inventory — books (4 slots)
-	fs = fs .. "label[0.4,7.8;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.1;4,1;]"
-
-	-- Upgrade inventory (4 slots)
-	fs = fs .. "label[0.4,9.3;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;0.4,9.6;4,1;]"
+	-- Books (4 slots) and Upgrades (4 slots) on one line with gap
+	fs = fs .. "label[0.4,6.8;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+	fs = fs .. "label[6.8,6.8;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.1;4,1;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.1;4,1;]"
 
 	-- Player inventory — all 4 rows
-	fs = fs .. "list[current_player;main;0.4,10.8;8,1;]"
-		.. "list[current_player;main;0.4,12.05;8,3;8]"
+	fs = fs .. "list[current_player;main;0.4,8.4;8,1;]"
+		.. "list[current_player;main;0.4,9.65;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
@@ -477,6 +472,30 @@ minetest.register_node("lazarus_space:jumpdrive", {
 			.. "x" .. meta:get_int("radius_z") .. "]")
 	end,
 
+	on_movenode = function(from_pos, to_pos, info)
+		-- Destroy technic network cache at source so switching station rebuilds
+		if technic.pos2network and technic.remove_network then
+			local src_net_id = technic.pos2network(from_pos)
+			if src_net_id then
+				technic.remove_network(src_net_id)
+			end
+			-- Also destroy network cache at edges near destination
+			if info and info.edge then
+				for axis, value in pairs(info.edge) do
+					if value ~= 0 then
+						local axis_dir = {x = 0, y = 0, z = 0}
+						axis_dir[axis] = value
+						local edge_pos = vector.add(to_pos, axis_dir)
+						local dst_net_id = technic.pos2network(edge_pos)
+						if dst_net_id then
+							technic.remove_network(dst_net_id)
+						end
+					end
+				end
+			end
+		end
+	end,
+
 	technic_on_disable = function(pos, node)
 		local meta = minetest.get_meta(pos)
 		meta:set_int("HV_EU_demand", 0)
@@ -486,6 +505,24 @@ minetest.register_node("lazarus_space:jumpdrive", {
 
 -- Register as HV machine
 technic.register_machine("HV", "lazarus_space:jumpdrive", technic.receiver)
+
+-- Force technic network rebuild after any jump that might include our node
+if jumpdrive and jumpdrive.register_after_jump then
+	jumpdrive.register_after_jump(function(from_area, to_area)
+		-- Invalidate networks at both source and destination areas
+		if technic.pos2network and technic.remove_network then
+			local from_center = {
+				x = math.floor((from_area.x + to_area.x) / 2),
+				y = math.floor((from_area.y + to_area.y) / 2),
+				z = math.floor((from_area.z + to_area.z) / 2),
+			}
+			local net_id = technic.pos2network(from_center)
+			if net_id then
+				technic.remove_network(net_id)
+			end
+		end
+	end)
+end
 
 -- ============================================================
 -- FORMSPEC HANDLER
