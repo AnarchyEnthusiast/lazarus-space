@@ -326,7 +326,7 @@ end
 local function draw_block_outline(bx, by, bz, color, player_name, duration)
 	local x1, y1, z1 = bx - 0.5, by - 0.5, bz - 0.5
 	local x2, y2, z2 = bx + 0.5, by + 0.5, bz + 0.5
-	local pts = 2  -- particles per edge (endpoints + midpoint = 3 total per edge)
+	local pts = 4  -- particles per edge (5 total per edge)
 
 	local edges = {
 		{x1,y1,z1, x2,y1,z1}, {x2,y1,z1, x2,y1,z2},
@@ -349,7 +349,7 @@ local function draw_block_outline(bx, by, bz, color, player_name, duration)
 				velocity = {x = 0, y = 0, z = 0},
 				acceleration = {x = 0, y = 0, z = 0},
 				expirationtime = duration,
-				size = 1.5,
+				size = 1.0,
 				glow = 14,
 				texture = "lazarus_space_particle_white.png^[colorize:" .. color .. ":255",
 				playername = player_name,
@@ -885,18 +885,26 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local rz = meta:get_int("radius_z")
 		meta:set_int("radius", math.max(rx, ry, rz))
 
-		local count = scan_blanket(pos, pname)
-
-		minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
-			"Blanket scan: " .. count .. " blocks selected — press Jump to move them"))
-
-		-- Draw orange box outline around the full radius for reference
-		local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
-		local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
-		if has_vizlib then
-			vizlib.draw_area(src1, src2, {color = "#ffaa00", player = player, time = 8})
+		if meta:get_int("blanket_mode") == 1 then
+			-- Toggle OFF
+			meta:set_int("blanket_mode", 0)
+			meta:set_int("blanket_count", 0)
+			minetest.chat_send_player(pname, minetest.colorize("#666666",
+				"Blanket mode disabled"))
 		else
-			draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+			-- Toggle ON — scan and highlight
+			local count = scan_blanket(pos, pname)
+			minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
+				"Blanket scan: " .. count .. " blocks selected — press Jump to move them"))
+
+			-- Draw outer box outline
+			local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+			local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+			if has_vizlib and vizlib and vizlib.draw_area then
+				vizlib.draw_area(src1, src2, {color = "#ffaa00", player = player, time = 8})
+			else
+				draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+			end
 		end
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
