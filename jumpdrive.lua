@@ -198,9 +198,9 @@ local function build_jumpdrive_formspec(pos)
 	fs = fs .. "label[0.4,7.32;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
-	-- Main inventory — fuel + books (8 slots)
-	fs = fs .. "label[0.4,7.8;" .. minetest.colorize("#aaaaaa", "Fuel / Books:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.1;8,1;]"
+	-- Main inventory — books (4 slots)
+	fs = fs .. "label[0.4,7.8;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.1;4,1;]"
 
 	-- Upgrade inventory (4 slots)
 	fs = fs .. "label[0.4,9.3;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
@@ -335,7 +335,7 @@ minetest.register_node("lazarus_space:jumpdrive", {
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		inv:set_size("main", 8)      -- fuel + books
+		inv:set_size("main", 4)      -- books only (no fuel)
 		inv:set_size("upgrade", 4)   -- technic energy crystals
 		meta:set_int("x", pos.x)
 		meta:set_int("y", pos.y)
@@ -350,7 +350,6 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		meta:set_int("max_powerstorage", BASE_MAX_POWER)
 		meta:set_string("owner", "")
 		meta:set_string("infotext", "Dimensional Jumpdrive (not owned)")
-		minetest.get_node_timer(pos):start(1)
 	end,
 
 	after_place_node = function(pos, placer)
@@ -397,37 +396,6 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		minetest.chat_send_player(pname,
 			"Radius: " .. rx .. "x" .. ry .. "x" .. rz
 			.. " | Area: " .. (rx*2+1) .. "x" .. (ry*2+1) .. "x" .. (rz*2+1) .. " blocks")
-	end,
-
-	on_timer = function(pos, elapsed)
-		local meta = minetest.get_meta(pos)
-		local inv = meta:get_inventory()
-		local stored = meta:get_int("powerstorage")
-		local max_store = meta:get_int("max_powerstorage")
-		if max_store == 0 then max_store = BASE_MAX_POWER end
-
-		if stored >= max_store then return true end
-
-		for i = 1, 8 do
-			local stack = inv:get_stack("main", i)
-			if not stack:is_empty() then
-				local fuel = minetest.get_craft_result({
-					method = "fuel",
-					width = 1,
-					items = {stack},
-				})
-				if fuel.time > 0 then
-					stack:take_item(1)
-					inv:set_stack("main", i, stack)
-					local power_gain = fuel.time * 100
-					stored = math.min(max_store, stored + power_gain)
-					meta:set_int("powerstorage", stored)
-					break
-				end
-			end
-		end
-
-		return true
 	end,
 
 	on_metadata_inventory_put = function(pos, listname)
