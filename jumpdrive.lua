@@ -133,7 +133,7 @@ end
 
 local function draw_particle_box(pos1, pos2, color, player_name, duration)
 	duration = duration or 5
-	local particles_per_edge = 10
+	local particles_per_edge = 30
 
 	local x1, y1, z1 = pos1.x - 0.5, pos1.y - 0.5, pos1.z - 0.5
 	local x2, y2, z2 = pos2.x + 0.5, pos2.y + 0.5, pos2.z + 0.5
@@ -385,42 +385,45 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local tx = meta:get_int("x")
 		local ty = meta:get_int("y")
 		local tz = meta:get_int("z")
-		local target = {x = tx, y = ty, z = tz}
-		local distance = vector.distance(pos, target)
 
-		-- Source area (using independent XYZ radii)
+		-- Run full preflight checks via jumpdrive API
+		if jumpdrive and jumpdrive.simulate_jump then
+			local success, msg = jumpdrive.simulate_jump(pos, player, true)
+			if msg and msg ~= "" then
+				-- simulate_jump returns multi-line messages with all check results
+				for line in msg:gmatch("[^\n]+") do
+					minetest.chat_send_player(pname, line)
+				end
+			end
+			if success then
+				minetest.chat_send_player(pname,
+					minetest.colorize("#00ff66", "Preflight OK — ready to jump"))
+			else
+				minetest.chat_send_player(pname,
+					minetest.colorize("#ff3333", "Preflight FAILED — see warnings above"))
+			end
+		else
+			-- Fallback: basic info only (no jumpdrive mod)
+			local distance = vector.distance(pos, {x = tx, y = ty, z = tz})
+			local power_needed = math.floor(10 * distance * max_radius)
+			local stored = meta:get_int("powerstorage")
+			local power_status = stored >= power_needed and "OK" or "INSUFFICIENT"
+			minetest.chat_send_player(pname,
+				"Distance: " .. math.floor(distance) .. " blocks | "
+				.. "Power: " .. stored .. "/" .. power_needed .. " EU (" .. power_status .. ") | "
+				.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
+		end
+
+		-- Always draw our own particle visualization for the XYZ radii
+		-- (vizlib only draws cubic areas, ours shows the actual rectangular bounds)
 		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
-
-		-- Target area (same dimensions, shifted)
+		local target = {x = tx, y = ty, z = tz}
 		local offset = vector.subtract(target, pos)
 		local target_pos1 = vector.add(source_pos1, offset)
 		local target_pos2 = vector.add(source_pos2, offset)
-
-		-- Draw source box (green) and target box (blue)
 		draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 8)
 		draw_particle_box(target_pos1, target_pos2, "#4488ff", pname, 8)
-
-		-- Calculate power
-		local power_needed
-		if jumpdrive and jumpdrive.calculate_power then
-			power_needed = jumpdrive.calculate_power(max_radius, distance)
-		else
-			power_needed = math.floor(10 * distance * max_radius)
-		end
-		local stored = meta:get_int("powerstorage")
-
-		local power_status = stored >= power_needed and "OK" or "INSUFFICIENT"
-		minetest.chat_send_player(pname,
-			"Source: (" .. source_pos1.x .. "," .. source_pos1.y .. "," .. source_pos1.z
-			.. ") to (" .. source_pos2.x .. "," .. source_pos2.y .. "," .. source_pos2.z .. ")")
-		minetest.chat_send_player(pname,
-			"Target: (" .. target_pos1.x .. "," .. target_pos1.y .. "," .. target_pos1.z
-			.. ") to (" .. target_pos2.x .. "," .. target_pos2.y .. "," .. target_pos2.z .. ")")
-		minetest.chat_send_player(pname,
-			"Distance: " .. math.floor(distance) .. " blocks | "
-			.. "Power: " .. stored .. "/" .. power_needed .. " EU (" .. power_status .. ") | "
-			.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
