@@ -5,6 +5,130 @@
 local MAX_RADIUS = 15
 
 -- ============================================================
+-- UPGRADE SYSTEM
+-- ============================================================
+
+local BASE_MAX_POWER = 1000000  -- 1M EU base storage
+
+local UPGRADE_ITEMS = {
+	["technic:red_energy_crystal"]   = 0.10,  -- +10% storage per crystal
+	["technic:green_energy_crystal"] = 0.20,  -- +20% storage per crystal
+	["technic:blue_energy_crystal"]  = 0.50,  -- +50% storage per crystal
+}
+
+local function recalculate_upgrades(pos)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
+
+	local multiplier = 1.0
+	for i = 1, inv:get_size("upgrade") do
+		local stack = inv:get_stack("upgrade", i)
+		local bonus = UPGRADE_ITEMS[stack:get_name()]
+		if bonus then
+			multiplier = multiplier + bonus
+		end
+	end
+
+	local max_power = math.floor(BASE_MAX_POWER * multiplier)
+	meta:set_int("max_powerstorage", max_power)
+
+	-- Clamp current storage if it exceeds new max
+	local stored = meta:get_int("powerstorage")
+	if stored > max_power then
+		meta:set_int("powerstorage", max_power)
+	end
+end
+
+-- ============================================================
+-- BOOK COORDINATE SYSTEM
+-- ============================================================
+
+local function write_coordinates_to_book(pos, player)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
+	local pname = player:get_player_name()
+
+	-- Find a blank book in the main inventory
+	local book_item = "default:book"
+	local book_slot = nil
+	for i = 1, inv:get_size("main") do
+		local stack = inv:get_stack("main", i)
+		if stack:get_name() == book_item then
+			book_slot = i
+			break
+		end
+	end
+
+	if not book_slot then
+		minetest.chat_send_player(pname, "No blank book found in inventory")
+		return false
+	end
+
+	-- Create written book with coordinates
+	local target = {
+		x = meta:get_int("x"),
+		y = meta:get_int("y"),
+		z = meta:get_int("z"),
+	}
+
+	local written = ItemStack("default:book_written")
+	local stack_meta = written:get_meta()
+	stack_meta:set_string("owner", pname)
+	stack_meta:set_string("title", "Jumpdrive Coordinates")
+	stack_meta:set_string("text", minetest.serialize(target))
+	stack_meta:set_string("description", "Jumpdrive: ("
+		.. target.x .. ", " .. target.y .. ", " .. target.z .. ")")
+
+	-- Remove blank book, add written book
+	local old_stack = inv:get_stack("main", book_slot)
+	old_stack:take_item(1)
+	inv:set_stack("main", book_slot, old_stack)
+
+	if inv:room_for_item("main", written) then
+		inv:add_item("main", written)
+	else
+		minetest.add_item(pos, written)  -- drop on ground if full
+	end
+
+	minetest.chat_send_player(pname, "Coordinates saved to book: ("
+		.. target.x .. ", " .. target.y .. ", " .. target.z .. ")")
+	return true
+end
+
+local function read_coordinates_from_book(pos, player)
+	local meta = minetest.get_meta(pos)
+	local inv = meta:get_inventory()
+	local pname = player:get_player_name()
+
+	-- Search for a written book in the main inventory (search backwards like original)
+	for i = inv:get_size("main"), 1, -1 do
+		local stack = inv:get_stack("main", i)
+		if stack:get_name() == "default:book_written" then
+			local stack_meta = stack:get_meta()
+			local text = stack_meta:get_string("text")
+			if text and text ~= "" then
+				local data = minetest.deserialize(text)
+				if data and data.x and data.y and data.z then
+					meta:set_int("x", math.floor(data.x))
+					meta:set_int("y", math.floor(data.y))
+					meta:set_int("z", math.floor(data.z))
+					minetest.chat_send_player(pname,
+						"Coordinates loaded: ("
+						.. data.x .. ", " .. data.y .. ", " .. data.z .. ")")
+					return true
+				else
+					minetest.chat_send_player(pname, "Invalid coordinates in book")
+					return false
+				end
+			end
+		end
+	end
+
+	minetest.chat_send_player(pname, "No written book found in inventory")
+	return false
+end
+
+-- ============================================================
 -- FORMSPEC BUILDER
 -- ============================================================
 
@@ -12,6 +136,8 @@ local function build_jumpdrive_formspec(pos)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 	local meta = minetest.get_meta(pos)
 	local stored = meta:get_int("powerstorage")
+	local max_store = meta:get_int("max_powerstorage")
+	if max_store == 0 then max_store = BASE_MAX_POWER end
 	local rx = meta:get_int("radius_x")
 	local ry = meta:get_int("radius_y")
 	local rz = meta:get_int("radius_z")
@@ -29,7 +155,7 @@ local function build_jumpdrive_formspec(pos)
 	end
 
 	local fs = "formspec_version[4]"
-		.. "size[12.4,15.6]"
+		.. "size[12.4,17.2]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -51,33 +177,43 @@ local function build_jumpdrive_formspec(pos)
 	fs = fs .. "field[4.2,3.1;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
 	fs = fs .. "field[8.0,3.1;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
 
-	-- Action buttons
+	-- Action buttons (row 1)
 	fs = fs .. "button[0.4,4.4;2.6,0.8;jump;Jump]"
 	fs = fs .. "button[3.4,4.4;2.6,0.8;show;Show]"
 	fs = fs .. "button[6.4,4.4;2.6,0.8;save;Save]"
 	fs = fs .. "button[9.4,4.4;2.6,0.8;reset;Reset]"
 
+	-- Book buttons (row 2)
+	fs = fs .. "button[0.4,5.4;5.4,0.8;write_book;Write to Book]"
+	fs = fs .. "button[6.2,5.4;5.4,0.8;read_book;Read from Book]"
+
 	-- Power status
 	local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-	fs = fs .. "label[0.4,5.6;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.6;" .. minetest.colorize("#aaaaaa",
 		"Power: ") .. minetest.colorize(power_color,
 		stored .. " / " .. power_needed .. " EU") .. "]"
-	fs = fs .. "label[0.4,5.96;" .. minetest.colorize("#aaaaaa",
-		"Effective radius: " .. max_radius
-		.. " (" .. rx .. "x" .. ry .. "x" .. rz .. ")") .. "]"
-	fs = fs .. "label[0.4,6.32;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.96;" .. minetest.colorize("#aaaaaa",
+		"Storage: " .. stored .. " / " .. max_store .. " EU"
+		.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
+	fs = fs .. "label[0.4,7.32;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
-	-- Fuel inventory (8 slots for burnable items)
-	fs = fs .. "label[0.4,6.8;" .. minetest.colorize("#aaaaaa", "Fuel:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.1;8,1;]"
+	-- Main inventory — fuel + books (8 slots)
+	fs = fs .. "label[0.4,7.8;" .. minetest.colorize("#aaaaaa", "Fuel / Books:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.1;8,1;]"
 
-	-- Player inventory
-	fs = fs .. "list[current_player;main;0.4,8.4;8,1;]"
-		.. "list[current_player;main;0.4,9.65;8,3;8]"
+	-- Upgrade inventory (4 slots)
+	fs = fs .. "label[0.4,9.3;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;0.4,9.6;4,1;]"
+
+	-- Player inventory — all 4 rows
+	fs = fs .. "list[current_player;main;0.4,10.8;8,1;]"
+		.. "list[current_player;main;0.4,12.05;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
+		.. "listring[current_player;main]"
+		.. "listring[nodemeta:" .. pos_str .. ";upgrade]"
 		.. "listring[current_player;main]"
 
 	return fs
@@ -199,17 +335,19 @@ minetest.register_node("lazarus_space:jumpdrive", {
 	on_construct = function(pos)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		inv:set_size("main", 8)
+		inv:set_size("main", 8)      -- fuel + books
+		inv:set_size("upgrade", 4)   -- technic energy crystals
 		meta:set_int("x", pos.x)
 		meta:set_int("y", pos.y)
 		meta:set_int("z", pos.z)
 		meta:set_int("radius_x", 5)
 		meta:set_int("radius_y", 5)
 		meta:set_int("radius_z", 5)
-		meta:set_int("radius", 5)  -- jumpdrive API reads this
+		meta:set_int("radius", 5)
 		meta:set_int("HV_EU_demand", 0)
 		meta:set_int("HV_EU_input", 0)
-		meta:set_int("powerstorage", 0)  -- jumpdrive API reads this
+		meta:set_int("powerstorage", 0)
+		meta:set_int("max_powerstorage", BASE_MAX_POWER)
 		meta:set_string("owner", "")
 		meta:set_string("infotext", "Dimensional Jumpdrive (not owned)")
 		minetest.get_node_timer(pos):start(1)
@@ -265,7 +403,8 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
 		local stored = meta:get_int("powerstorage")
-		local max_store = 1000000
+		local max_store = meta:get_int("max_powerstorage")
+		if max_store == 0 then max_store = BASE_MAX_POWER end
 
 		if stored >= max_store then return true end
 
@@ -283,17 +422,42 @@ minetest.register_node("lazarus_space:jumpdrive", {
 					local power_gain = fuel.time * 100
 					stored = math.min(max_store, stored + power_gain)
 					meta:set_int("powerstorage", stored)
-					break  -- burn one item per tick
+					break
 				end
 			end
 		end
 
-		return true  -- keep timer running
+		return true
+	end,
+
+	on_metadata_inventory_put = function(pos, listname)
+		if listname == "upgrade" then
+			recalculate_upgrades(pos)
+		end
+	end,
+
+	on_metadata_inventory_take = function(pos, listname)
+		if listname == "upgrade" then
+			recalculate_upgrades(pos)
+		end
+	end,
+
+	on_metadata_inventory_move = function(pos, from_list, from_index, to_list)
+		if from_list == "upgrade" or to_list == "upgrade" then
+			recalculate_upgrades(pos)
+		end
 	end,
 
 	allow_metadata_inventory_put = function(pos, listname, index, stack, player)
 		local meta = minetest.get_meta(pos)
 		if meta:get_string("owner") ~= player:get_player_name() then
+			return 0
+		end
+		if listname == "upgrade" then
+			-- Only allow registered upgrade items
+			if UPGRADE_ITEMS[stack:get_name()] then
+				return stack:get_count()
+			end
 			return 0
 		end
 		return stack:get_count()
@@ -312,13 +476,22 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		if meta:get_string("owner") ~= player:get_player_name() then
 			return 0
 		end
+		if to_list == "upgrade" then
+			-- Check if the item being moved is a valid upgrade
+			local inv = meta:get_inventory()
+			local stack = inv:get_stack(from_list, from_index)
+			if not UPGRADE_ITEMS[stack:get_name()] then
+				return 0
+			end
+		end
 		return count
 	end,
 
 	technic_run = function(pos, node)
 		local meta = minetest.get_meta(pos)
 		local stored = meta:get_int("powerstorage")
-		local max_store = 1000000
+		local max_store = meta:get_int("max_powerstorage")
+		if max_store == 0 then max_store = BASE_MAX_POWER end
 
 		if stored < max_store then
 			meta:set_int("HV_EU_demand", 10000)
@@ -330,7 +503,7 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		end
 
 		meta:set_string("infotext", "Dimensional Jumpdrive — "
-			.. stored .. " EU stored"
+			.. stored .. " / " .. max_store .. " EU"
 			.. " [" .. meta:get_int("radius_x")
 			.. "x" .. meta:get_int("radius_y")
 			.. "x" .. meta:get_int("radius_z") .. "]")
@@ -372,6 +545,15 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		meta:set_int("x", pos.x)
 		meta:set_int("y", pos.y)
 		meta:set_int("z", pos.z)
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
+
+	elseif fields.write_book then
+		save_fields(pos, fields)
+		write_coordinates_to_book(pos, player)
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
+
+	elseif fields.read_book then
+		read_coordinates_from_book(pos, player)
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
 	elseif fields.show then
