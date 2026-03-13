@@ -432,14 +432,10 @@ local function execute_blanket_jump(pos, player)
 	local dst1 = vector.add(src1, offset)
 	local dst2 = vector.add(src2, offset)
 
-	-- Overlap check — areas must not intersect
-	if not (src2.x < dst1.x or dst2.x < src1.x or
-	        src2.y < dst1.y or dst2.y < src1.y or
-	        src2.z < dst1.z or dst2.z < src1.z) then
-		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
-			"Source and target areas overlap — cannot blanket jump"))
-		return false
-	end
+	-- Check for source/destination overlap — if overlapping, we need a two-pass approach
+	local areas_overlap = not (src2.x < dst1.x or dst2.x < src1.x or
+	                           src2.y < dst1.y or dst2.y < src1.y or
+	                           src2.z < dst1.z or dst2.z < src1.z)
 
 	local c_air = minetest.get_content_id("air")
 	local c_ignore = minetest.get_content_id("ignore")
@@ -482,6 +478,22 @@ local function execute_blanket_jump(pos, player)
 			src_p2[si] = 0
 		end
 	end end end
+
+	-- Per-block collision check: every non-air source block must land on air at destination
+	local dst_vm_check = minetest.get_voxel_manip(dst1, dst2)
+	local dst_check_emin, dst_check_emax = dst_vm_check:get_emerged_area()
+	local dst_check_data = dst_vm_check:get_data()
+	local dst_check_va = VoxelArea:new({MinEdge = dst_check_emin, MaxEdge = dst_check_emax})
+
+	for _, entry in ipairs(move_list) do
+		local di = dst_check_va:index(entry.to.x, entry.to.y, entry.to.z)
+		if dst_check_data[di] ~= c_air and dst_check_data[di] ~= c_ignore then
+			minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+				"Blanket jump blocked — destination has non-air block at ("
+				.. entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z .. ")"))
+			return false
+		end
+	end
 
 	if #move_list == 0 then
 		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
@@ -638,7 +650,10 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
 
 		if has_vizlib then
-			vizlib.draw_area(source_pos1, source_pos2, {color = "#00ff66", player = puncher, time = 5})
+			vizlib.draw_area(
+				{x = source_pos1.x - 0.5, y = source_pos1.y - 0.5, z = source_pos1.z - 0.5},
+				{x = source_pos2.x + 0.5, y = source_pos2.y + 0.5, z = source_pos2.z + 0.5},
+				{color = "#00ff66", player = puncher, time = 5})
 		else
 			draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 5)
 		end
@@ -869,8 +884,14 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local target_pos1 = vector.add(source_pos1, offset)
 		local target_pos2 = vector.add(source_pos2, offset)
 		if has_vizlib then
-			vizlib.draw_area(source_pos1, source_pos2, {color = "#00ff66", player = player, time = 8})
-			vizlib.draw_area(target_pos1, target_pos2, {color = "#4488ff", player = player, time = 8})
+			vizlib.draw_area(
+				{x = source_pos1.x - 0.5, y = source_pos1.y - 0.5, z = source_pos1.z - 0.5},
+				{x = source_pos2.x + 0.5, y = source_pos2.y + 0.5, z = source_pos2.z + 0.5},
+				{color = "#00ff66", player = player, time = 8})
+			vizlib.draw_area(
+				{x = target_pos1.x - 0.5, y = target_pos1.y - 0.5, z = target_pos1.z - 0.5},
+				{x = target_pos2.x + 0.5, y = target_pos2.y + 0.5, z = target_pos2.z + 0.5},
+				{color = "#4488ff", player = player, time = 8})
 		else
 			draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 8)
 			draw_particle_box(target_pos1, target_pos2, "#4488ff", pname, 8)
@@ -901,7 +922,10 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 			local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 			local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
 			if has_vizlib and vizlib and vizlib.draw_area then
-				vizlib.draw_area(src1, src2, {color = "#ffaa00", player = player, time = 8})
+				vizlib.draw_area(
+					{x = src1.x - 0.5, y = src1.y - 0.5, z = src1.z - 0.5},
+					{x = src2.x + 0.5, y = src2.y + 0.5, z = src2.z + 0.5},
+					{color = "#ffaa00", player = player, time = 8})
 			else
 				draw_particle_box(src1, src2, "#ffaa00", pname, 8)
 			end
