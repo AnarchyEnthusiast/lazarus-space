@@ -3,6 +3,7 @@
 -- Compatible with jumpdrive mod API (powerstorage, radius meta fields)
 
 local MAX_RADIUS = 15
+local has_vizlib = minetest.get_modpath("vizlib")
 
 -- ============================================================
 -- UPGRADE SYSTEM
@@ -609,7 +610,11 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
 
-		draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 5)
+		if has_vizlib then
+			vizlib.draw_area(source_pos1, source_pos2, {color = "#00ff66", player = puncher, time = 5})
+		else
+			draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 5)
+		end
 
 		minetest.chat_send_player(pname,
 			"Radius: " .. rx .. "x" .. ry .. "x" .. rz
@@ -836,8 +841,13 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local offset = vector.subtract(target, pos)
 		local target_pos1 = vector.add(source_pos1, offset)
 		local target_pos2 = vector.add(source_pos2, offset)
-		draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 8)
-		draw_particle_box(target_pos1, target_pos2, "#4488ff", pname, 8)
+		if has_vizlib then
+			vizlib.draw_area(source_pos1, source_pos2, {color = "#00ff66", player = player, time = 8})
+			vizlib.draw_area(target_pos1, target_pos2, {color = "#4488ff", player = player, time = 8})
+		else
+			draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 8)
+			draw_particle_box(target_pos1, target_pos2, "#4488ff", pname, 8)
+		end
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
@@ -856,7 +866,11 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		-- Draw orange box outline around the full radius for reference
 		local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 		local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
-		draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+		if has_vizlib then
+			vizlib.draw_area(src1, src2, {color = "#ffaa00", player = player, time = 8})
+		else
+			draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+		end
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
