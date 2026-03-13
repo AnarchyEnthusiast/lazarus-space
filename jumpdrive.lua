@@ -155,7 +155,7 @@ local function build_jumpdrive_formspec(pos)
 	end
 
 	local fs = "formspec_version[4]"
-		.. "size[12.4,14.8]"
+		.. "size[12.4,14.6]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
@@ -174,36 +174,37 @@ local function build_jumpdrive_formspec(pos)
 	fs = fs .. "field[4.2,2.6;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
 	fs = fs .. "field[8.0,2.6;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
 
-	-- Action buttons (row 1)
-	fs = fs .. "button[0.4,3.8;2.6,0.8;jump;Jump]"
-	fs = fs .. "button[3.4,3.8;2.6,0.8;show;Show]"
-	fs = fs .. "button[6.4,3.8;2.6,0.8;save;Save]"
-	fs = fs .. "button[9.4,3.8;2.6,0.8;reset;Reset]"
+	-- Action buttons row 1: Jump, Blanket, Show, Save
+	fs = fs .. "button[0.4,3.8;2.7,0.8;jump;Jump]"
+	fs = fs .. "button[3.3,3.8;2.7,0.8;blanket;Blanket]"
+	fs = fs .. "button[6.2,3.8;2.7,0.8;show;Show]"
+	fs = fs .. "button[9.1,3.8;2.7,0.8;save;Save]"
 
-	-- Book buttons (row 2)
-	fs = fs .. "button[0.4,4.8;5.4,0.8;write_book;Write to Book]"
-	fs = fs .. "button[6.2,4.8;5.4,0.8;read_book;Read from Book]"
+	-- Action buttons row 2: Write to Book, Read from Book, Reset
+	fs = fs .. "button[0.4,4.8;3.6,0.8;write_book;Write to Book]"
+	fs = fs .. "button[4.2,4.8;3.6,0.8;read_book;Read from Book]"
+	fs = fs .. "button[8.0,4.8;3.4,0.8;reset;Reset]"
 
-	-- Power status
+	-- Power status (y=6.0, well below buttons ending at 5.6)
 	local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-	fs = fs .. "label[0.4,5.6;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.0;" .. minetest.colorize("#aaaaaa",
 		"Power: ") .. minetest.colorize(power_color,
 		stored .. " / " .. power_needed .. " EU") .. "]"
-	fs = fs .. "label[0.4,5.96;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.36;" .. minetest.colorize("#aaaaaa",
 		"Storage: " .. stored .. " / " .. max_store .. " EU"
 		.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
-	fs = fs .. "label[0.4,6.32;" .. minetest.colorize("#aaaaaa",
+	fs = fs .. "label[0.4,6.72;" .. minetest.colorize("#aaaaaa",
 		"Owner: " .. meta:get_string("owner")) .. "]"
 
 	-- Books (4 slots) and Upgrades (4 slots) on one line with gap
-	fs = fs .. "label[0.4,6.8;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
-	fs = fs .. "label[6.8,6.8;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.1;4,1;]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.1;4,1;]"
+	fs = fs .. "label[0.4,7.2;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+	fs = fs .. "label[6.8,7.2;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.5;4,1;]"
+	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.5;4,1;]"
 
 	-- Player inventory — all 4 rows
-	fs = fs .. "list[current_player;main;0.4,8.4;8,1;]"
-		.. "list[current_player;main;0.4,9.65;8,3;8]"
+	fs = fs .. "list[current_player;main;0.4,8.8;8,1;]"
+		.. "list[current_player;main;0.4,10.05;8,3;8]"
 
 	-- Shift-click targets
 	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
@@ -307,6 +308,166 @@ local function draw_particle_box(pos1, pos2, color, player_name, duration)
 			})
 		end
 	end
+end
+
+-- ============================================================
+-- BLANKET JUMP: move non-air blocks only, preserve destination terrain
+-- ============================================================
+
+local function execute_blanket_jump(pos, player)
+	local meta = minetest.get_meta(pos)
+	local pname = player:get_player_name()
+	local rx = meta:get_int("radius_x")
+	local ry = meta:get_int("radius_y")
+	local rz = meta:get_int("radius_z")
+	local max_radius = math.max(rx, ry, rz)
+
+	local target = {x = meta:get_int("x"), y = meta:get_int("y"), z = meta:get_int("z")}
+	local offset = vector.subtract(target, pos)
+	local distance = vector.distance(pos, target)
+
+	-- Power check
+	local power_needed
+	if jumpdrive and jumpdrive.calculate_power then
+		power_needed = jumpdrive.calculate_power(max_radius, distance)
+	else
+		power_needed = math.floor(10 * distance * max_radius)
+	end
+	local stored = meta:get_int("powerstorage")
+	if stored < power_needed then
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"Not enough power: " .. stored .. "/" .. power_needed .. " EU"))
+		return false
+	end
+
+	-- Source and destination areas
+	local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+	local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+	local dst1 = vector.add(src1, offset)
+	local dst2 = vector.add(src2, offset)
+
+	-- Overlap check — areas must not intersect
+	if not (src2.x < dst1.x or dst2.x < src1.x or
+	        src2.y < dst1.y or dst2.y < src1.y or
+	        src2.z < dst1.z or dst2.z < src1.z) then
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"Source and target areas overlap — cannot blanket jump"))
+		return false
+	end
+
+	local c_air = minetest.get_content_id("air")
+	local c_ignore = minetest.get_content_id("ignore")
+
+	-- Phase 1: Read source area, collect non-air node data and metadata
+	local src_vm = minetest.get_voxel_manip(src1, src2)
+	local src_emin, src_emax = src_vm:get_emerged_area()
+	local src_data = src_vm:get_data()
+	local src_p2 = src_vm:get_param2_data()
+	local src_va = VoxelArea:new({MinEdge = src_emin, MaxEdge = src_emax})
+
+	local move_list = {}
+	for z = src1.z, src2.z do
+	for y = src1.y, src2.y do
+	for x = src1.x, src2.x do
+		local si = src_va:index(x, y, z)
+		if src_data[si] ~= c_air and src_data[si] ~= c_ignore then
+			local from_pos = {x = x, y = y, z = z}
+			local to_pos = {x = x + offset.x, y = y + offset.y, z = z + offset.z}
+
+			-- Save metadata and timer before we clear the source
+			local meta_table = minetest.get_meta(from_pos):to_table()
+			local timer = minetest.get_node_timer(from_pos)
+			local timer_data = nil
+			if timer:is_started() then
+				timer_data = {timeout = timer:get_timeout(), elapsed = timer:get_elapsed()}
+			end
+
+			table.insert(move_list, {
+				from = from_pos,
+				to = to_pos,
+				id = src_data[si],
+				p2 = src_p2[si],
+				meta = meta_table,
+				timer = timer_data,
+			})
+
+			-- Mark source as air
+			src_data[si] = c_air
+			src_p2[si] = 0
+		end
+	end end end
+
+	if #move_list == 0 then
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"No blocks to move — area is empty"))
+		return false
+	end
+
+	-- Phase 2: Write cleared source area
+	src_vm:set_data(src_data)
+	src_vm:set_param2_data(src_p2)
+	src_vm:write_to_map(true)
+
+	-- Phase 3: Read destination, overlay non-air nodes (preserve existing terrain)
+	local dst_vm = minetest.get_voxel_manip(dst1, dst2)
+	local dst_emin, dst_emax = dst_vm:get_emerged_area()
+	local dst_data = dst_vm:get_data()
+	local dst_p2 = dst_vm:get_param2_data()
+	local dst_va = VoxelArea:new({MinEdge = dst_emin, MaxEdge = dst_emax})
+
+	for _, entry in ipairs(move_list) do
+		local di = dst_va:index(entry.to.x, entry.to.y, entry.to.z)
+		dst_data[di] = entry.id
+		dst_p2[di] = entry.p2
+	end
+
+	dst_vm:set_data(dst_data)
+	dst_vm:set_param2_data(dst_p2)
+	dst_vm:write_to_map(true)
+
+	-- Phase 4: Transfer metadata and timers to destination, clear source metadata
+	for _, entry in ipairs(move_list) do
+		if entry.meta then
+			minetest.get_meta(entry.to):from_table(entry.meta)
+		end
+		if entry.timer then
+			minetest.get_node_timer(entry.to):set(entry.timer.timeout, entry.timer.elapsed)
+		end
+		-- Clear leftover source metadata
+		minetest.get_meta(entry.from):from_table({fields = {}, inventory = {}})
+		minetest.get_node_timer(entry.from):stop()
+	end
+
+	-- Phase 5: Move players and objects inside source area to destination
+	local objects = minetest.get_objects_in_area(
+		{x = src1.x - 0.5, y = src1.y - 0.5, z = src1.z - 0.5},
+		{x = src2.x + 0.5, y = src2.y + 0.5, z = src2.z + 0.5}
+	)
+	for _, obj in ipairs(objects) do
+		obj:set_pos(vector.add(obj:get_pos(), offset))
+	end
+
+	-- Phase 6: Deduct power from jumpdrive at its new position
+	local new_pos = vector.add(pos, offset)
+	local new_meta = minetest.get_meta(new_pos)
+	new_meta:set_int("powerstorage", stored - power_needed)
+
+	-- Phase 7: Invalidate technic networks at both locations
+	if technic.pos2network and technic.remove_network then
+		local sn = technic.pos2network(pos)
+		if sn then technic.remove_network(sn) end
+		local dn = technic.pos2network(new_pos)
+		if dn then technic.remove_network(dn) end
+	end
+
+	-- Sound effect
+	if minetest.get_modpath("jumpdrive") then
+		minetest.sound_play("jumpdrive_engine", {pos = new_pos, gain = 1.0, max_hear_distance = 50})
+	end
+
+	minetest.chat_send_player(pname, minetest.colorize("#00ff66",
+		"Blanket jump complete — " .. #move_list .. " blocks moved"))
+	return true
 end
 
 -- ============================================================
@@ -644,6 +805,26 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		else
 			minetest.chat_send_player(pname,
 				"Jumpdrive mod not available — cannot execute jump")
+		end
+
+	elseif fields.blanket then
+		-- Blanket jump: move non-air blocks only
+		save_fields(pos, fields)
+
+		local rx = meta:get_int("radius_x")
+		local ry = meta:get_int("radius_y")
+		local rz = meta:get_int("radius_z")
+		local max_radius = math.max(rx, ry, rz)
+		meta:set_int("radius", max_radius)
+
+		local success = execute_blanket_jump(pos, player)
+
+		if success then
+			-- Node has MOVED — pos is stale, close formspec
+			minetest.close_formspec(pname, formname)
+		else
+			-- Jump failed — node still at old pos, refresh formspec
+			minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 		end
 	end
 end)
