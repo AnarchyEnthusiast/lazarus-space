@@ -322,6 +322,42 @@ local function draw_particle_box(pos1, pos2, color, player_name, duration)
 	end
 end
 
+-- Draw the 12 edges of a single block as a small wireframe
+local function draw_block_outline(bx, by, bz, color, player_name, duration)
+	local x1, y1, z1 = bx - 0.5, by - 0.5, bz - 0.5
+	local x2, y2, z2 = bx + 0.5, by + 0.5, bz + 0.5
+	local pts = 2  -- particles per edge (endpoints + midpoint = 3 total per edge)
+
+	local edges = {
+		{x1,y1,z1, x2,y1,z1}, {x2,y1,z1, x2,y1,z2},
+		{x2,y1,z2, x1,y1,z2}, {x1,y1,z2, x1,y1,z1},
+		{x1,y2,z1, x2,y2,z1}, {x2,y2,z1, x2,y2,z2},
+		{x2,y2,z2, x1,y2,z2}, {x1,y2,z2, x1,y2,z1},
+		{x1,y1,z1, x1,y2,z1}, {x2,y1,z1, x2,y2,z1},
+		{x2,y1,z2, x2,y2,z2}, {x1,y1,z2, x1,y2,z2},
+	}
+
+	for _, e in ipairs(edges) do
+		for i = 0, pts do
+			local t = i / pts
+			minetest.add_particle({
+				pos = {
+					x = e[1] + (e[4] - e[1]) * t,
+					y = e[2] + (e[5] - e[2]) * t,
+					z = e[3] + (e[6] - e[3]) * t,
+				},
+				velocity = {x = 0, y = 0, z = 0},
+				acceleration = {x = 0, y = 0, z = 0},
+				expirationtime = duration,
+				size = 1.5,
+				glow = 14,
+				texture = "lazarus_space_particle_white.png^[colorize:" .. color .. ":255",
+				playername = player_name,
+			})
+		end
+	end
+end
+
 -- ============================================================
 -- BLANKET SCAN: highlight non-air blocks in radius with particles
 -- ============================================================
@@ -350,16 +386,7 @@ local function scan_blanket(pos, player_name)
 		local i = va:index(x, y, z)
 		if data[i] ~= c_air and data[i] ~= c_ignore then
 			count = count + 1
-			minetest.add_particle({
-				pos = {x = x, y = y + 0.5, z = z},
-				velocity = {x = 0, y = 0.1, z = 0},
-				acceleration = {x = 0, y = 0, z = 0},
-				expirationtime = 8,
-				size = 3,
-				glow = 14,
-				texture = "lazarus_space_particle_white.png^[colorize:#ffaa00:200",
-				playername = player_name,
-			})
+			draw_block_outline(x, y, z, "#ffaa00", player_name, 8)
 		end
 	end end end
 
