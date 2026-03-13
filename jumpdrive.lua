@@ -323,10 +323,11 @@ local function draw_particle_box(pos1, pos2, color, player_name, duration)
 end
 
 -- Draw the 12 edges of a single block as a small wireframe
-local function draw_block_outline(bx, by, bz, color, player_name, duration)
+-- pts = subdivisions per edge (0 = corners only, 4 = 5 points per edge)
+local function draw_block_outline(bx, by, bz, color, player_name, duration, pts)
+	pts = pts or 4
 	local x1, y1, z1 = bx - 0.5, by - 0.5, bz - 0.5
 	local x2, y2, z2 = bx + 0.5, by + 0.5, bz + 0.5
-	local pts = 4  -- particles per edge (5 total per edge)
 
 	local edges = {
 		{x1,y1,z1, x2,y1,z1}, {x2,y1,z1, x2,y1,z2},
@@ -339,7 +340,7 @@ local function draw_block_outline(bx, by, bz, color, player_name, duration)
 
 	for _, e in ipairs(edges) do
 		for i = 0, pts do
-			local t = i / pts
+			local t = pts > 0 and (i / pts) or 0.5
 			minetest.add_particle({
 				pos = {
 					x = e[1] + (e[4] - e[1]) * t,
@@ -374,21 +375,44 @@ local function scan_blanket(pos, player_name)
 	local c_air = minetest.get_content_id("air")
 	local c_ignore = minetest.get_content_id("ignore")
 
-	local vm = minetest.get_voxel_manip(src1, src2)
+	-- Pad by 1 to ensure mapblock-border blocks are fully emerged
+	local pad1 = {x = src1.x - 1, y = src1.y - 1, z = src1.z - 1}
+	local pad2 = {x = src2.x + 1, y = src2.y + 1, z = src2.z + 1}
+	local vm = minetest.get_voxel_manip(pad1, pad2)
 	local emin, emax = vm:get_emerged_area()
 	local data = vm:get_data()
 	local va = VoxelArea:new({MinEdge = emin, MaxEdge = emax})
 
+	-- First pass: count non-air blocks
 	local count = 0
+	local blocks = {}
 	for z = src1.z, src2.z do
 	for y = src1.y, src2.y do
 	for x = src1.x, src2.x do
 		local i = va:index(x, y, z)
 		if data[i] ~= c_air and data[i] ~= c_ignore then
 			count = count + 1
-			draw_block_outline(x, y, z, "#ffaa00", player_name, 8)
+			table.insert(blocks, {x = x, y = y, z = z})
 		end
 	end end end
+
+	-- Scale particle density based on block count to stay under Minetest limits
+	-- Under 200 blocks: full detail (60 particles/block = 12,000 max)
+	-- 200-500 blocks: reduced (36 particles/block)
+	-- Over 500: minimal (12 particles/block)
+	local pts
+	if count <= 200 then
+		pts = 4      -- 5 per edge = 60 per block
+	elseif count <= 500 then
+		pts = 2      -- 3 per edge = 36 per block
+	else
+		pts = 0      -- 1 per edge = 12 per block (midpoint only)
+	end
+
+	-- Second pass: draw outlines with scaled density
+	for _, b in ipairs(blocks) do
+		draw_block_outline(b.x, b.y, b.z, "#ffaa00", player_name, 8, pts)
+	end
 
 	meta:set_int("blanket_mode", 1)
 	meta:set_int("blanket_count", count)
@@ -479,8 +503,22 @@ local function execute_blanket_jump(pos, player)
 		end
 	end end end
 
+	-- Build lookup of all source positions being cleared to air
+	local clearing = {}
+	for _, entry in ipairs(move_list) do
+		clearing[entry.from.x .. "," .. entry.from.y .. "," .. entry.from.z] = true
+	end
+
 	-- Per-block collision check: every non-air source block must land on air at destination
-	local dst_vm_check = minetest.get_voxel_manip(dst1, dst2)
+	-- Read a combined area covering both source and destination so we get correct data
+	-- even when they're in the same mapblock
+	local check_min = {
+		x = math.min(src1.x, dst1.x), y = math.min(src1.y, dst1.y), z = math.min(src1.z, dst1.z)
+	}
+	local check_max = {
+		x = math.max(src2.x, dst2.x), y = math.max(src2.y, dst2.y), z = math.max(src2.z, dst2.z)
+	}
+	local dst_vm_check = minetest.get_voxel_manip(check_min, check_max)
 	local dst_check_emin, dst_check_emax = dst_vm_check:get_emerged_area()
 	local dst_check_data = dst_vm_check:get_data()
 	local dst_check_va = VoxelArea:new({MinEdge = dst_check_emin, MaxEdge = dst_check_emax})
@@ -488,10 +526,14 @@ local function execute_blanket_jump(pos, player)
 	for _, entry in ipairs(move_list) do
 		local di = dst_check_va:index(entry.to.x, entry.to.y, entry.to.z)
 		if dst_check_data[di] ~= c_air and dst_check_data[di] ~= c_ignore then
-			minetest.chat_send_player(pname, minetest.colorize("#ff3333",
-				"Blanket jump blocked — destination has non-air block at ("
-				.. entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z .. ")"))
-			return false
+			-- Check if this position is a source block being cleared
+			local to_key = entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z
+			if not clearing[to_key] then
+				minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+					"Blanket jump blocked — destination has non-air block at ("
+					.. entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z .. ")"))
+				return false
+			end
 		end
 	end
 
