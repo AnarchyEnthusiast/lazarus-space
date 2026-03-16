@@ -232,9 +232,9 @@ local function build_jumpdrive_formspec(pos, tab_override)
 		fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.2;4,1;]"
 		fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,8.2;4,1;]"
 
-		-- Player inventory
-		fs = fs .. "list[current_player;main;0.4,9.56;8,1;]"
-			.. "list[current_player;main;0.4,10.81;8,3;8]"
+		-- Player inventory (centered)
+		fs = fs .. "list[current_player;main;1.3,9.56;8,1;]"
+			.. "list[current_player;main;1.3,10.81;8,3;8]"
 
 		-- Shift-click targets
 		fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
@@ -279,20 +279,20 @@ local function build_jumpdrive_formspec(pos, tab_override)
 		local excludes = meta:get_string("blanket_excludes")
 		fs = fs .. "field[0.4,3.3;11,0.8;blanket_excludes;Exclude Nodes (comma-separated);" .. minetest.formspec_escape(excludes) .. "]"
 
-		-- Relative coordinate selection
-		fs = fs .. "label[0.4,4.4;" .. minetest.colorize("#aaaaaa", "Relative Position (offset from drive):") .. "]"
-		fs = fs .. "field[0.4,4.7;2.6,0.8;sel_rx;X;0]"
-		fs = fs .. "field[3.2,4.7;2.6,0.8;sel_ry;Y;0]"
-		fs = fs .. "field[6.0,4.7;2.6,0.8;sel_rz;Z;0]"
-		fs = fs .. "button[8.8,4.7;1.6,0.8;sel_include;Include]"
-		fs = fs .. "button[10.5,4.7;1.5,0.8;sel_exclude;Exclude]"
+		-- Relative coordinate selection — label above, fields below with gap
+		fs = fs .. "label[0.4,4.16;" .. minetest.colorize("#aaaaaa", "Relative Position (offset from drive):") .. "]"
+		fs = fs .. "field[0.4,4.9;2.6,0.8;sel_rx;X;0]"
+		fs = fs .. "field[3.2,4.9;2.6,0.8;sel_ry;Y;0]"
+		fs = fs .. "field[6.0,4.9;2.6,0.8;sel_rz;Z;0]"
+		fs = fs .. "button[8.8,4.9;1.6,0.8;sel_include;Include]"
+		fs = fs .. "button[10.5,4.9;1.5,0.8;sel_exclude;Exclude]"
 
 		-- Status
 		if blanket_active then
-			fs = fs .. "label[0.4,5.9;" .. minetest.colorize("#ffaa00",
+			fs = fs .. "label[0.4,6.1;" .. minetest.colorize("#ffaa00",
 				"Blanket: ACTIVE (" .. bcount .. " blocks)") .. "]"
 		else
-			fs = fs .. "label[0.4,5.9;" .. minetest.colorize("#666666",
+			fs = fs .. "label[0.4,6.1;" .. minetest.colorize("#666666",
 				"Blanket: OFF") .. "]"
 		end
 
@@ -315,25 +315,25 @@ local function build_jumpdrive_formspec(pos, tab_override)
 			table.insert(excl_list, name)
 		end
 
-		fs = fs .. "label[0.4,6.26;" .. minetest.colorize("#aaaaaa",
+		fs = fs .. "label[0.4,6.46;" .. minetest.colorize("#aaaaaa",
 			"Node exclusions: " .. #excl_list .. " | Pos includes: " .. include_count
 			.. " | Pos excludes: " .. exclude_count) .. "]"
 
 		-- Power status (compact)
 		local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-		fs = fs .. "label[0.4,6.72;" .. minetest.colorize("#aaaaaa",
+		fs = fs .. "label[0.4,6.92;" .. minetest.colorize("#aaaaaa",
 			"Power: ") .. minetest.colorize(power_color,
 			stored .. " / " .. power_needed .. " EU")
 			.. "  " .. minetest.colorize("#aaaaaa",
 			"Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
 
 		-- Clear selections button
-		fs = fs .. "button[0.4,7.2;5.3,0.8;clear_selections;Clear All Selections]"
-		fs = fs .. "button[5.9,7.2;5.5,0.8;remove_excludes;Clear All Exclusions]"
+		fs = fs .. "button[0.4,7.4;5.3,0.8;clear_selections;Clear All Selections]"
+		fs = fs .. "button[5.9,7.4;5.5,0.8;remove_excludes;Clear All Exclusions]"
 
-		-- Player inventory
-		fs = fs .. "list[current_player;main;0.4,8.56;8,1;]"
-			.. "list[current_player;main;0.4,9.81;8,3;8]"
+		-- Player inventory (centered)
+		fs = fs .. "list[current_player;main;1.3,8.76;8,1;]"
+			.. "list[current_player;main;1.3,10.01;8,3;8]"
 	end
 
 	return fs
@@ -782,11 +782,11 @@ local function execute_blanket_jump(pos, player)
 	end
 
 	-- Phase 6: Deduct power from jumpdrive at its new position
+	-- Keep blanket settings (mode, count, selections, excludes) so player
+	-- can jump again without reconfiguring
 	local new_pos = vector.add(pos, offset)
 	local new_meta = minetest.get_meta(new_pos)
 	new_meta:set_int("powerstorage", stored - power_needed)
-	new_meta:set_int("blanket_mode", 0)
-	new_meta:set_int("blanket_count", 0)
 
 	-- Phase 7: Invalidate technic networks at both locations
 	if technic.pos2network and technic.remove_network then
@@ -1105,37 +1105,171 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local tx = meta:get_int("x")
 		local ty = meta:get_int("y")
 		local tz = meta:get_int("z")
+		local distance = vector.distance(pos, {x = tx, y = ty, z = tz})
 
-		-- Run full preflight checks via jumpdrive API
-		if jumpdrive and jumpdrive.simulate_jump then
-			local success, msg = jumpdrive.simulate_jump(pos, player, true)
-			if msg and msg ~= "" then
-				-- simulate_jump returns multi-line messages with all check results
-				for line in msg:gmatch("[^\n]+") do
-					minetest.chat_send_player(pname, line)
+		if meta:get_int("blanket_mode") == 1 then
+			-- Blanket preflight: check per-block collisions instead of full-area check
+			local target = {x = tx, y = ty, z = tz}
+			local offset = vector.subtract(target, pos)
+
+			if offset.x == 0 and offset.y == 0 and offset.z == 0 then
+				minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+					"Target is the same as current position"))
+			else
+				local power_needed
+				if jumpdrive and jumpdrive.calculate_power then
+					power_needed = jumpdrive.calculate_power(max_radius, distance)
+				else
+					power_needed = math.floor(10 * distance * max_radius)
+				end
+				local stored = meta:get_int("powerstorage")
+
+				-- Power status
+				if stored < power_needed then
+					minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+						"Power: " .. stored .. "/" .. power_needed .. " EU — INSUFFICIENT"))
+				else
+					minetest.chat_send_player(pname, minetest.colorize("#00ff66",
+						"Power: " .. stored .. "/" .. power_needed .. " EU — OK"))
+				end
+
+				-- Per-block collision check (same logic as execute_blanket_jump)
+				local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+				local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+				local dst1 = vector.add(src1, offset)
+				local dst2 = vector.add(src2, offset)
+
+				local c_air = minetest.get_content_id("air")
+				local c_ignore = minetest.get_content_id("ignore")
+
+				-- Parse exclusions and selections
+				local excludes_str = meta:get_string("blanket_excludes")
+				local exclude_ids = {}
+				for name in excludes_str:gmatch("[^,%s]+") do
+					local cid = minetest.get_content_id(name)
+					if cid then exclude_ids[cid] = true end
+				end
+				local selections_str = meta:get_string("blanket_selections")
+				local selections = {}
+				if selections_str ~= "" then
+					selections = minetest.deserialize(selections_str) or {}
+				end
+
+				-- Read source to find blocks that would be moved
+				local src_vm = minetest.get_voxel_manip(src1, src2)
+				local src_emin, src_emax = src_vm:get_emerged_area()
+				local src_data = src_vm:get_data()
+				local src_va = VoxelArea:new({MinEdge = src_emin, MaxEdge = src_emax})
+
+				local move_positions = {}
+				local source_keys = {}
+				for z = src1.z, src2.z do
+				for y = src1.y, src2.y do
+				for x = src1.x, src2.x do
+					local si = src_va:index(x, y, z)
+					if src_data[si] ~= c_air and src_data[si] ~= c_ignore then
+						local rel_key = (x - pos.x) .. "," .. (y - pos.y) .. "," .. (z - pos.z)
+						local sel = selections[rel_key]
+						local should_move = true
+						if sel == "exclude" then
+							should_move = false
+						elseif sel == "include" then
+							should_move = true
+						elseif exclude_ids[src_data[si]] then
+							should_move = false
+						end
+						if should_move then
+							local to = {x = x + offset.x, y = y + offset.y, z = z + offset.z}
+							table.insert(move_positions, to)
+							source_keys[x .. "," .. y .. "," .. z] = true
+						end
+					end
+				end end end
+
+				-- Check destination for conflicts
+				local check_min = {
+					x = math.min(src1.x, dst1.x), y = math.min(src1.y, dst1.y), z = math.min(src1.z, dst1.z)
+				}
+				local check_max = {
+					x = math.max(src2.x, dst2.x), y = math.max(src2.y, dst2.y), z = math.max(src2.z, dst2.z)
+				}
+				local dst_vm = minetest.get_voxel_manip(check_min, check_max)
+				local dst_emin, dst_emax = dst_vm:get_emerged_area()
+				local dst_data = dst_vm:get_data()
+				local dst_va = VoxelArea:new({MinEdge = dst_emin, MaxEdge = dst_emax})
+
+				local conflicts = 0
+				local dst_has_blocks = false
+				for _, to in ipairs(move_positions) do
+					local di = dst_va:index(to.x, to.y, to.z)
+					if dst_data[di] ~= c_air and dst_data[di] ~= c_ignore then
+						local to_key = to.x .. "," .. to.y .. "," .. to.z
+						if not source_keys[to_key] then
+							conflicts = conflicts + 1
+						end
+					end
+				end
+
+				-- Check if destination area has any non-air at all
+				for z = dst1.z, dst2.z do
+				for y = dst1.y, dst2.y do
+				for x = dst1.x, dst2.x do
+					local di = dst_va:index(x, y, z)
+					if dst_data[di] ~= c_air and dst_data[di] ~= c_ignore then
+						dst_has_blocks = true
+						break
+					end
+				end
+				if dst_has_blocks then break end
+				end
+				if dst_has_blocks then break end
+				end
+
+				-- Report results
+				minetest.chat_send_player(pname, minetest.colorize("#aaaaaa",
+					"Blanket: " .. #move_positions .. " blocks to move | Distance: "
+					.. math.floor(distance) .. " blocks"))
+
+				if conflicts > 0 then
+					minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+						"Blanket preflight BLOCKED — " .. conflicts
+						.. " selected blocks would collide with terrain at destination"))
+				elseif dst_has_blocks then
+					minetest.chat_send_player(pname, minetest.colorize("#00ff66",
+						"Destination has blocks but blanket selection only lands on air — OK to jump"))
+				else
+					minetest.chat_send_player(pname, minetest.colorize("#00ff66",
+						"Blanket preflight OK — destination is clear"))
 				end
 			end
-			if success then
-				minetest.chat_send_player(pname,
-					minetest.colorize("#00ff66", "Preflight OK — ready to jump"))
-			else
-				minetest.chat_send_player(pname,
-					minetest.colorize("#ff3333", "Preflight FAILED — see warnings above"))
-			end
 		else
-			-- Fallback: basic info only (no jumpdrive mod)
-			local distance = vector.distance(pos, {x = tx, y = ty, z = tz})
-			local power_needed = math.floor(10 * distance * max_radius)
-			local stored = meta:get_int("powerstorage")
-			local power_status = stored >= power_needed and "OK" or "INSUFFICIENT"
-			minetest.chat_send_player(pname,
-				"Distance: " .. math.floor(distance) .. " blocks | "
-				.. "Power: " .. stored .. "/" .. power_needed .. " EU (" .. power_status .. ") | "
-				.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
+			-- Normal preflight via jumpdrive API (no marker — we draw our own)
+			if jumpdrive and jumpdrive.simulate_jump then
+				local success, msg = jumpdrive.simulate_jump(pos, player, false)
+				if msg and msg ~= "" then
+					for line in msg:gmatch("[^\n]+") do
+						minetest.chat_send_player(pname, line)
+					end
+				end
+				if success then
+					minetest.chat_send_player(pname,
+						minetest.colorize("#00ff66", "Preflight OK — ready to jump"))
+				else
+					minetest.chat_send_player(pname,
+						minetest.colorize("#ff3333", "Preflight FAILED — see warnings above"))
+				end
+			else
+				local power_needed = math.floor(10 * distance * max_radius)
+				local stored = meta:get_int("powerstorage")
+				local power_status = stored >= power_needed and "OK" or "INSUFFICIENT"
+				minetest.chat_send_player(pname,
+					"Distance: " .. math.floor(distance) .. " blocks | "
+					.. "Power: " .. stored .. "/" .. power_needed .. " EU (" .. power_status .. ") | "
+					.. "Radius: " .. rx .. "x" .. ry .. "x" .. rz)
+			end
 		end
 
-		-- Always draw our own particle visualization for the XYZ radii
-		-- (vizlib only draws cubic areas, ours shows the actual rectangular bounds)
+		-- Draw our own particle visualization (both normal and blanket modes)
 		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
 		local target = {x = tx, y = ty, z = tz}
