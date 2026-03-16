@@ -700,12 +700,6 @@ local function execute_blanket_jump(pos, player)
 		end
 	end end end
 
-	-- Build lookup of all source positions being cleared to air
-	local clearing = {}
-	for _, entry in ipairs(move_list) do
-		clearing[entry.from.x .. "," .. entry.from.y .. "," .. entry.from.z] = true
-	end
-
 	-- Per-block collision check: every non-air source block must land on air at destination
 	-- Read a combined area covering both source and destination so we get correct data
 	-- even when they're in the same mapblock
@@ -723,14 +717,10 @@ local function execute_blanket_jump(pos, player)
 	for _, entry in ipairs(move_list) do
 		local di = dst_check_va:index(entry.to.x, entry.to.y, entry.to.z)
 		if dst_check_data[di] ~= c_air and dst_check_data[di] ~= c_ignore then
-			-- Check if this position is a source block being cleared
-			local to_key = entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z
-			if not clearing[to_key] then
-				minetest.chat_send_player(pname, minetest.colorize("#ff3333",
-					"Blanket jump blocked — destination has non-air block at ("
-					.. entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z .. ")"))
-				return false
-			end
+			minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+				"Blanket jump blocked — destination has non-air block at ("
+				.. entry.to.x .. "," .. entry.to.y .. "," .. entry.to.z .. ")"))
+			return false
 		end
 	end
 
@@ -1165,7 +1155,6 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 				local src_va = VoxelArea:new({MinEdge = src_emin, MaxEdge = src_emax})
 
 				local move_positions = {}
-				local source_keys = {}
 				for z = src1.z, src2.z do
 				for y = src1.y, src2.y do
 				for x = src1.x, src2.x do
@@ -1184,7 +1173,6 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 						if should_move then
 							local to = {x = x + offset.x, y = y + offset.y, z = z + offset.z}
 							table.insert(move_positions, to)
-							source_keys[x .. "," .. y .. "," .. z] = true
 						end
 					end
 				end end end
@@ -1206,10 +1194,7 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 				for _, to in ipairs(move_positions) do
 					local di = dst_va:index(to.x, to.y, to.z)
 					if dst_data[di] ~= c_air and dst_data[di] ~= c_ignore then
-						local to_key = to.x .. "," .. to.y .. "," .. to.z
-						if not source_keys[to_key] then
-							conflicts = conflicts + 1
-						end
+						conflicts = conflicts + 1
 					end
 				end
 
