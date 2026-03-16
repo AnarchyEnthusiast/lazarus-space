@@ -190,10 +190,18 @@ local function build_jumpdrive_formspec(pos, tab_override)
 		fs = fs .. "field[4.2,3.3;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
 		fs = fs .. "field[8.0,3.3;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
 
-		-- Action buttons row 1: Jump, Show, Save
-		fs = fs .. "button[0.4,4.5;3.6,0.8;jump;Jump]"
-		fs = fs .. "button[4.2,4.5;3.6,0.8;show;Show]"
-		fs = fs .. "button[8.0,4.5;3.4,0.8;save;Save]"
+		-- Action buttons row 1: Jump, Show, Save, Blanket toggle
+		local blanket_on = meta:get_int("blanket_mode") == 1
+		if blanket_on then
+			fs = fs .. "button[0.4,4.5;2.7,0.8;jump;Jump]"
+			fs = fs .. "button[3.3,4.5;2.7,0.8;blanket_toggle;"
+				.. minetest.colorize("#ffaa00", "Blanket: ON") .. "]"
+		else
+			fs = fs .. "button[0.4,4.5;2.7,0.8;jump;Jump]"
+			fs = fs .. "button[3.3,4.5;2.7,0.8;blanket_toggle;Blanket: OFF]"
+		end
+		fs = fs .. "button[6.2,4.5;2.7,0.8;show;Show]"
+		fs = fs .. "button[9.1,4.5;2.7,0.8;save;Save]"
 
 		-- Action buttons row 2: Write to Book, Read from Book, Reset
 		fs = fs .. "button[0.4,5.5;3.6,0.8;write_book;Write to Book]"
@@ -210,6 +218,13 @@ local function build_jumpdrive_formspec(pos, tab_override)
 			.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
 		fs = fs .. "label[0.4,7.42;" .. minetest.colorize("#aaaaaa",
 			"Owner: " .. meta:get_string("owner")) .. "]"
+
+		-- Blanket status on Jump tab
+		if blanket_on then
+			local bcount = meta:get_int("blanket_count")
+			fs = fs .. "label[0.4,7.78;" .. minetest.colorize("#ffaa00",
+				"Blanket: ON (" .. bcount .. " blocks) — Jump will move selected blocks only") .. "]"
+		end
 
 		-- Books (4 slots) and Upgrades (4 slots) on one line with gap
 		fs = fs .. "label[0.4,7.9;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
@@ -312,16 +327,13 @@ local function build_jumpdrive_formspec(pos, tab_override)
 			.. "  " .. minetest.colorize("#aaaaaa",
 			"Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
 
-		-- Jump blanket button (wide)
-		fs = fs .. "button[0.4,7.2;11,0.8;jump_blanket;Jump Blanket]"
-
 		-- Clear selections button
-		fs = fs .. "button[0.4,8.2;5.3,0.8;clear_selections;Clear All Selections]"
-		fs = fs .. "button[5.9,8.2;5.5,0.8;remove_excludes;Clear All Exclusions]"
+		fs = fs .. "button[0.4,7.2;5.3,0.8;clear_selections;Clear All Selections]"
+		fs = fs .. "button[5.9,7.2;5.5,0.8;remove_excludes;Clear All Exclusions]"
 
 		-- Player inventory
-		fs = fs .. "list[current_player;main;0.4,9.56;8,1;]"
-			.. "list[current_player;main;0.4,10.81;8,3;8]"
+		fs = fs .. "list[current_player;main;0.4,8.56;8,1;]"
+			.. "list[current_player;main;0.4,9.81;8,3;8]"
 	end
 
 	return fs
@@ -572,6 +584,13 @@ local function execute_blanket_jump(pos, player)
 	local target = {x = meta:get_int("x"), y = meta:get_int("y"), z = meta:get_int("z")}
 	local offset = vector.subtract(target, pos)
 	local distance = vector.distance(pos, target)
+
+	-- Reject zero-distance jump — metadata cleanup would corrupt data
+	if offset.x == 0 and offset.y == 0 and offset.z == 0 then
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"Target is the same as current position — cannot jump"))
+		return false
+	end
 
 	-- Power check
 	local power_needed
@@ -1139,6 +1158,22 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
+	elseif fields.blanket_toggle then
+		save_fields(pos, fields)
+		if meta:get_int("blanket_mode") == 1 then
+			-- Toggle OFF
+			meta:set_int("blanket_mode", 0)
+			meta:set_int("blanket_count", 0)
+			minetest.chat_send_player(pname, minetest.colorize("#666666",
+				"Blanket mode disabled"))
+		else
+			-- Toggle ON — scan and highlight
+			local count = scan_blanket(pos, pname)
+			minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
+				"Blanket mode ON — " .. count .. " blocks selected"))
+		end
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
+
 	elseif fields.jump then
 		save_fields(pos, fields)
 
@@ -1148,19 +1183,30 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local max_radius = math.max(rx, ry, rz)
 		meta:set_int("radius", max_radius)
 
-		-- Normal jump via jumpdrive API (blanket jump is on the Blanket tab)
-		if jumpdrive and jumpdrive.execute_jump then
-			local success, result = jumpdrive.execute_jump(pos, player)
+		if meta:get_int("blanket_mode") == 1 then
+			-- Blanket jump: non-air selected blocks only
+			local success = execute_blanket_jump(pos, player)
 			if success then
-				minetest.chat_send_player(pname,
-					"Jump complete! (" .. (result or "?") .. " ms)")
+				player_select_mode[pname] = nil
+				minetest.close_formspec(pname, formname)
 			else
-				minetest.chat_send_player(pname,
-					"Jump failed: " .. tostring(result))
+				minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 			end
 		else
-			minetest.chat_send_player(pname,
-				"Jumpdrive mod not available — cannot execute jump")
+			-- Normal jump via jumpdrive API
+			if jumpdrive and jumpdrive.execute_jump then
+				local success, result = jumpdrive.execute_jump(pos, player)
+				if success then
+					minetest.chat_send_player(pname,
+						"Jump complete! (" .. (result or "?") .. " ms)")
+				else
+					minetest.chat_send_player(pname,
+						"Jump failed: " .. tostring(result))
+				end
+			else
+				minetest.chat_send_player(pname,
+					"Jumpdrive mod not available — cannot execute jump")
+			end
 		end
 
 	elseif fields.blanket_scan then
@@ -1254,29 +1300,6 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 			"All node exclusions cleared"))
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
 
-	elseif fields.jump_blanket then
-		-- Save excludes field if present
-		if fields.blanket_excludes then
-			meta:set_string("blanket_excludes", fields.blanket_excludes)
-		end
-		save_fields(pos, fields)
-		local rx = meta:get_int("radius_x")
-		local ry = meta:get_int("radius_y")
-		local rz = meta:get_int("radius_z")
-		meta:set_int("radius", math.max(rx, ry, rz))
-
-		-- Force blanket mode on if not already (scan first if needed)
-		if meta:get_int("blanket_mode") ~= 1 then
-			scan_blanket(pos, pname)
-		end
-
-		local success = execute_blanket_jump(pos, player)
-		if success then
-			player_select_mode[pname] = nil  -- clear select mode after jump
-			minetest.close_formspec(pname, formname)
-		else
-			minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
-		end
 	end
 end)
 
@@ -1415,14 +1438,15 @@ minetest.register_on_punchnode(function(punch_pos, node, puncher, pointed_thing)
 	drive_meta:set_string("blanket_selections", minetest.serialize(selections))
 
 	-- Visual feedback: color coded particle on the punched block
+	-- Short duration (1.5s) so previous color doesn't overlap with new color on rapid punching
 	if new_mode == "exclude" then
 		draw_block_outline(punch_pos.x, punch_pos.y, punch_pos.z,
-			"#ff3333", pname, 4, 2)
+			"#ff3333", pname, 1.5, 3)
 		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
 			"Excluded (" .. key .. ")"))
 	else
 		draw_block_outline(punch_pos.x, punch_pos.y, punch_pos.z,
-			"#00ff66", pname, 4, 2)
+			"#00ff66", pname, 1.5, 3)
 		minetest.chat_send_player(pname, minetest.colorize("#00ff66",
 			"Restored (" .. key .. ") to default"))
 	end
