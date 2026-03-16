@@ -5,6 +5,10 @@
 local MAX_RADIUS = 15
 local has_vizlib = minetest.get_modpath("vizlib")
 
+-- Per-player blanket select mode state
+-- player_select_mode[playername] = {pos = jumpdrive_pos} or nil
+local player_select_mode = {}
+
 -- ============================================================
 -- UPGRADE SYSTEM
 -- ============================================================
@@ -133,7 +137,7 @@ end
 -- FORMSPEC BUILDER
 -- ============================================================
 
-local function build_jumpdrive_formspec(pos)
+local function build_jumpdrive_formspec(pos, tab_override)
 	local pos_str = pos.x .. "," .. pos.y .. "," .. pos.z
 	local meta = minetest.get_meta(pos)
 	local stored = meta:get_int("powerstorage")
@@ -155,74 +159,170 @@ local function build_jumpdrive_formspec(pos)
 		power_needed = math.floor(10 * distance * max_radius)
 	end
 
+	local current_tab = tab_override or meta:get_int("formspec_tab")
+	if current_tab == 0 then current_tab = 1 end
+
 	local fs = "formspec_version[4]"
 		.. "size[12.4,14.96]"
 		.. "bgcolor[#080808;true]"
 		.. "no_prepend[]"
 
-	-- Title bar
-	fs = fs .. "box[0,0;12.4,0.8;#1a1a2e]"
-		.. "label[3.2,0.16;" .. minetest.colorize("#00ccaa",
-		"Dimensional Jumpdrive") .. "]"
+	-- Tab header
+	fs = fs .. "tabheader[0,0;12.4,0.7;formspec_tab;Jump,Blanket;" .. current_tab .. ";false;false]"
 
-	-- Target coordinates
-	fs = fs .. "field[0.4,1.2;3.4,0.8;x;Target X;" .. meta:get_int("x") .. "]"
-	fs = fs .. "field[4.2,1.2;3.4,0.8;y;Target Y;" .. meta:get_int("y") .. "]"
-	fs = fs .. "field[8.0,1.2;3.4,0.8;z;Target Z;" .. meta:get_int("z") .. "]"
+	if current_tab == 1 then
+		-- ========================
+		-- JUMP TAB (existing UI)
+		-- ========================
 
-	-- Radius controls
-	fs = fs .. "field[0.4,2.6;3.4,0.8;radius_x;Radius X (1-" .. MAX_RADIUS .. ");" .. rx .. "]"
-	fs = fs .. "field[4.2,2.6;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
-	fs = fs .. "field[8.0,2.6;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
+		-- Title bar
+		fs = fs .. "box[0,0.7;12.4,0.8;#1a1a2e]"
+			.. "label[3.2,0.86;" .. minetest.colorize("#00ccaa",
+			"Dimensional Jumpdrive") .. "]"
 
-	-- Action buttons row 1: Jump, Blanket, Show, Save
-	fs = fs .. "button[0.4,3.8;2.7,0.8;jump;Jump]"
-	fs = fs .. "button[3.3,3.8;2.7,0.8;blanket;Blanket]"
-	fs = fs .. "button[6.2,3.8;2.7,0.8;show;Show]"
-	fs = fs .. "button[9.1,3.8;2.7,0.8;save;Save]"
+		-- Target coordinates
+		fs = fs .. "field[0.4,1.9;3.4,0.8;x;Target X;" .. meta:get_int("x") .. "]"
+		fs = fs .. "field[4.2,1.9;3.4,0.8;y;Target Y;" .. meta:get_int("y") .. "]"
+		fs = fs .. "field[8.0,1.9;3.4,0.8;z;Target Z;" .. meta:get_int("z") .. "]"
 
-	-- Action buttons row 2: Write to Book, Read from Book, Reset
-	fs = fs .. "button[0.4,4.8;3.6,0.8;write_book;Write to Book]"
-	fs = fs .. "button[4.2,4.8;3.6,0.8;read_book;Read from Book]"
-	fs = fs .. "button[8.0,4.8;3.4,0.8;reset;Reset]"
+		-- Radius controls
+		fs = fs .. "field[0.4,3.3;3.4,0.8;radius_x;Radius X (1-" .. MAX_RADIUS .. ");" .. rx .. "]"
+		fs = fs .. "field[4.2,3.3;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
+		fs = fs .. "field[8.0,3.3;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
 
-	-- Power status (y=6.0, well below buttons ending at 5.6)
-	local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-	fs = fs .. "label[0.4,6.0;" .. minetest.colorize("#aaaaaa",
-		"Power: ") .. minetest.colorize(power_color,
-		stored .. " / " .. power_needed .. " EU") .. "]"
-	fs = fs .. "label[0.4,6.36;" .. minetest.colorize("#aaaaaa",
-		"Storage: " .. stored .. " / " .. max_store .. " EU"
-		.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
-	fs = fs .. "label[0.4,6.72;" .. minetest.colorize("#aaaaaa",
-		"Owner: " .. meta:get_string("owner")) .. "]"
+		-- Action buttons row 1: Jump, Show, Save
+		fs = fs .. "button[0.4,4.5;3.6,0.8;jump;Jump]"
+		fs = fs .. "button[4.2,4.5;3.6,0.8;show;Show]"
+		fs = fs .. "button[8.0,4.5;3.4,0.8;save;Save]"
 
-	-- Blanket status
-	local blanket_active = meta:get_int("blanket_mode") == 1
-	if blanket_active then
-		local bcount = meta:get_int("blanket_count")
-		fs = fs .. "label[0.4,7.08;" .. minetest.colorize("#ffaa00",
-			"Blanket: ACTIVE (" .. bcount .. " blocks)") .. "]"
+		-- Action buttons row 2: Write to Book, Read from Book, Reset
+		fs = fs .. "button[0.4,5.5;3.6,0.8;write_book;Write to Book]"
+		fs = fs .. "button[4.2,5.5;3.6,0.8;read_book;Read from Book]"
+		fs = fs .. "button[8.0,5.5;3.4,0.8;reset;Reset]"
+
+		-- Power status
+		local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
+		fs = fs .. "label[0.4,6.7;" .. minetest.colorize("#aaaaaa",
+			"Power: ") .. minetest.colorize(power_color,
+			stored .. " / " .. power_needed .. " EU") .. "]"
+		fs = fs .. "label[0.4,7.06;" .. minetest.colorize("#aaaaaa",
+			"Storage: " .. stored .. " / " .. max_store .. " EU"
+			.. " | Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
+		fs = fs .. "label[0.4,7.42;" .. minetest.colorize("#aaaaaa",
+			"Owner: " .. meta:get_string("owner")) .. "]"
+
+		-- Books (4 slots) and Upgrades (4 slots) on one line with gap
+		fs = fs .. "label[0.4,7.9;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+		fs = fs .. "label[6.8,7.9;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+		fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.2;4,1;]"
+		fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,8.2;4,1;]"
+
+		-- Player inventory
+		fs = fs .. "list[current_player;main;0.4,9.56;8,1;]"
+			.. "list[current_player;main;0.4,10.81;8,3;8]"
+
+		-- Shift-click targets
+		fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
+			.. "listring[current_player;main]"
+			.. "listring[nodemeta:" .. pos_str .. ";upgrade]"
+			.. "listring[current_player;main]"
+
 	else
-		fs = fs .. "label[0.4,7.08;" .. minetest.colorize("#666666",
-			"Blanket: OFF") .. "]"
+		-- ========================
+		-- BLANKET TAB
+		-- ========================
+
+		-- Title bar
+		fs = fs .. "box[0,0.7;12.4,0.8;#1a1a2e]"
+			.. "label[3.6,0.86;" .. minetest.colorize("#ffaa00",
+			"Blanket Mode") .. "]"
+
+		-- Blanket status
+		local blanket_active = meta:get_int("blanket_mode") == 1
+		local bcount = meta:get_int("blanket_count")
+
+		-- Action buttons: Scan, Clear, Select Mode
+		fs = fs .. "button[0.4,1.9;3.6,0.8;blanket_scan;Scan]"
+		fs = fs .. "button[4.2,1.9;3.6,0.8;blanket_clear;Clear]"
+
+		-- Select mode button — color indicates state
+		-- Check if any player has select mode active for this drive
+		local select_active = false
+		for _, sdata in pairs(player_select_mode) do
+			if sdata.pos and vector.equals(sdata.pos, pos) then
+				select_active = true
+				break
+			end
+		end
+		if select_active then
+			fs = fs .. "button[8.0,1.9;3.4,0.8;select_mode;" .. minetest.colorize("#00aaff", "Select: ON") .. "]"
+		else
+			fs = fs .. "button[8.0,1.9;3.4,0.8;select_mode;Select: OFF]"
+		end
+
+		-- Exclude nodes field
+		local excludes = meta:get_string("blanket_excludes")
+		fs = fs .. "field[0.4,3.3;11,0.8;blanket_excludes;Exclude Nodes (comma-separated);" .. minetest.formspec_escape(excludes) .. "]"
+
+		-- Relative coordinate selection
+		fs = fs .. "label[0.4,4.4;" .. minetest.colorize("#aaaaaa", "Relative Position (offset from drive):") .. "]"
+		fs = fs .. "field[0.4,4.7;2.6,0.8;sel_rx;X;0]"
+		fs = fs .. "field[3.2,4.7;2.6,0.8;sel_ry;Y;0]"
+		fs = fs .. "field[6.0,4.7;2.6,0.8;sel_rz;Z;0]"
+		fs = fs .. "button[8.8,4.7;1.6,0.8;sel_include;Include]"
+		fs = fs .. "button[10.5,4.7;1.5,0.8;sel_exclude;Exclude]"
+
+		-- Status
+		if blanket_active then
+			fs = fs .. "label[0.4,5.9;" .. minetest.colorize("#ffaa00",
+				"Blanket: ACTIVE (" .. bcount .. " blocks)") .. "]"
+		else
+			fs = fs .. "label[0.4,5.9;" .. minetest.colorize("#666666",
+				"Blanket: OFF") .. "]"
+		end
+
+		-- Show exclusion and selection counts
+		local selections_str = meta:get_string("blanket_selections")
+		local selections = {}
+		if selections_str ~= "" then
+			selections = minetest.deserialize(selections_str) or {}
+		end
+		local include_count = 0
+		local exclude_count = 0
+		for _, mode in pairs(selections) do
+			if mode == "include" then include_count = include_count + 1
+			elseif mode == "exclude" then exclude_count = exclude_count + 1
+			end
+		end
+
+		local excl_list = {}
+		for name in excludes:gmatch("[^,%s]+") do
+			table.insert(excl_list, name)
+		end
+
+		fs = fs .. "label[0.4,6.26;" .. minetest.colorize("#aaaaaa",
+			"Node exclusions: " .. #excl_list .. " | Pos includes: " .. include_count
+			.. " | Pos excludes: " .. exclude_count) .. "]"
+
+		-- Power status (compact)
+		local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
+		fs = fs .. "label[0.4,6.72;" .. minetest.colorize("#aaaaaa",
+			"Power: ") .. minetest.colorize(power_color,
+			stored .. " / " .. power_needed .. " EU")
+			.. "  " .. minetest.colorize("#aaaaaa",
+			"Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
+
+		-- Jump blanket button (wide)
+		fs = fs .. "button[0.4,7.2;11,0.8;jump_blanket;Jump Blanket]"
+
+		-- Clear selections button
+		fs = fs .. "button[0.4,8.2;5.3,0.8;clear_selections;Clear All Selections]"
+		fs = fs .. "button[5.9,8.2;5.5,0.8;remove_excludes;Clear All Exclusions]"
+
+		-- Player inventory
+		fs = fs .. "list[current_player;main;0.4,9.56;8,1;]"
+			.. "list[current_player;main;0.4,10.81;8,3;8]"
 	end
-
-	-- Books (4 slots) and Upgrades (4 slots) on one line with gap
-	fs = fs .. "label[0.4,7.56;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
-	fs = fs .. "label[6.8,7.56;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,7.86;4,1;]"
-	fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,7.86;4,1;]"
-
-	-- Player inventory — all 4 rows
-	fs = fs .. "list[current_player;main;0.4,9.16;8,1;]"
-		.. "list[current_player;main;0.4,10.41;8,3;8]"
-
-	-- Shift-click targets
-	fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
-		.. "listring[current_player;main]"
-		.. "listring[nodemeta:" .. pos_str .. ";upgrade]"
-		.. "listring[current_player;main]"
 
 	return fs
 end
@@ -375,6 +475,29 @@ local function scan_blanket(pos, player_name)
 	local c_air = minetest.get_content_id("air")
 	local c_ignore = minetest.get_content_id("ignore")
 
+	-- Parse exclusion list
+	local excludes_str = meta:get_string("blanket_excludes")
+	local exclude_set = {}
+	for name in excludes_str:gmatch("[^,%s]+") do
+		exclude_set[name] = true
+	end
+
+	-- Parse position selections
+	local selections_str = meta:get_string("blanket_selections")
+	local selections = {}
+	if selections_str ~= "" then
+		selections = minetest.deserialize(selections_str) or {}
+	end
+
+	-- Build content ID exclusion set for fast VM lookup
+	local exclude_ids = {}
+	for name, _ in pairs(exclude_set) do
+		local cid = minetest.get_content_id(name)
+		if cid then
+			exclude_ids[cid] = true
+		end
+	end
+
 	-- Pad by 1 to ensure mapblock-border blocks are fully emerged
 	local pad1 = {x = src1.x - 1, y = src1.y - 1, z = src1.z - 1}
 	local pad2 = {x = src2.x + 1, y = src2.y + 1, z = src2.z + 1}
@@ -383,41 +506,55 @@ local function scan_blanket(pos, player_name)
 	local data = vm:get_data()
 	local va = VoxelArea:new({MinEdge = emin, MaxEdge = emax})
 
-	-- First pass: count non-air blocks
-	local count = 0
-	local blocks = {}
+	-- First pass: categorize all non-air blocks
+	local included = {}
+	local excluded = {}
 	for z = src1.z, src2.z do
 	for y = src1.y, src2.y do
 	for x = src1.x, src2.x do
 		local i = va:index(x, y, z)
 		if data[i] ~= c_air and data[i] ~= c_ignore then
-			count = count + 1
-			table.insert(blocks, {x = x, y = y, z = z})
+			local rel_key = (x - pos.x) .. "," .. (y - pos.y) .. "," .. (z - pos.z)
+
+			-- Check position selection override first
+			local sel = selections[rel_key]
+			if sel == "exclude" then
+				table.insert(excluded, {x = x, y = y, z = z})
+			elseif sel == "include" then
+				table.insert(included, {x = x, y = y, z = z})
+			elseif exclude_ids[data[i]] then
+				-- Node type is in the exclusion list
+				table.insert(excluded, {x = x, y = y, z = z})
+			else
+				-- Default: include
+				table.insert(included, {x = x, y = y, z = z})
+			end
 		end
 	end end end
 
-	-- Scale particle density based on block count to stay under Minetest limits
-	-- Under 200 blocks: full detail (60 particles/block = 12,000 max)
-	-- 200-500 blocks: reduced (36 particles/block)
-	-- Over 500: minimal (12 particles/block)
+	-- Scale particle density based on total block count
+	local total = #included + #excluded
 	local pts
-	if count <= 200 then
-		pts = 4      -- 5 per edge = 60 per block
-	elseif count <= 500 then
-		pts = 2      -- 3 per edge = 36 per block
+	if total <= 200 then
+		pts = 4
+	elseif total <= 500 then
+		pts = 2
 	else
-		pts = 0      -- 1 per edge = 12 per block (midpoint only)
+		pts = 0
 	end
 
-	-- Second pass: draw outlines with scaled density
-	for _, b in ipairs(blocks) do
-		draw_block_outline(b.x, b.y, b.z, "#ffaa00", player_name, 8, pts)
+	-- Draw included blocks in green, excluded in red
+	for _, b in ipairs(included) do
+		draw_block_outline(b.x, b.y, b.z, "#00ff66", player_name, 8, pts)
+	end
+	for _, b in ipairs(excluded) do
+		draw_block_outline(b.x, b.y, b.z, "#ff3333", player_name, 8, pts)
 	end
 
 	meta:set_int("blanket_mode", 1)
-	meta:set_int("blanket_count", count)
+	meta:set_int("blanket_count", #included)
 
-	return count
+	return #included
 end
 
 -- ============================================================
@@ -471,35 +608,73 @@ local function execute_blanket_jump(pos, player)
 	local src_p2 = src_vm:get_param2_data()
 	local src_va = VoxelArea:new({MinEdge = src_emin, MaxEdge = src_emax})
 
+	-- Parse exclusion list
+	local excludes_str = meta:get_string("blanket_excludes")
+	local exclude_set = {}
+	for name in excludes_str:gmatch("[^,%s]+") do
+		exclude_set[name] = true
+	end
+
+	-- Build content ID exclusion set
+	local exclude_ids = {}
+	for name, _ in pairs(exclude_set) do
+		local cid = minetest.get_content_id(name)
+		if cid then
+			exclude_ids[cid] = true
+		end
+	end
+
+	-- Parse position selections
+	local selections_str = meta:get_string("blanket_selections")
+	local selections = {}
+	if selections_str ~= "" then
+		selections = minetest.deserialize(selections_str) or {}
+	end
+
 	local move_list = {}
 	for z = src1.z, src2.z do
 	for y = src1.y, src2.y do
 	for x = src1.x, src2.x do
 		local si = src_va:index(x, y, z)
 		if src_data[si] ~= c_air and src_data[si] ~= c_ignore then
-			local from_pos = {x = x, y = y, z = z}
-			local to_pos = {x = x + offset.x, y = y + offset.y, z = z + offset.z}
+			local rel_key = (x - pos.x) .. "," .. (y - pos.y) .. "," .. (z - pos.z)
 
-			-- Save metadata and timer before we clear the source
-			local meta_table = minetest.get_meta(from_pos):to_table()
-			local timer = minetest.get_node_timer(from_pos)
-			local timer_data = nil
-			if timer:is_started() then
-				timer_data = {timeout = timer:get_timeout(), elapsed = timer:get_elapsed()}
+			-- Check if this block should be moved
+			local sel = selections[rel_key]
+			local should_move = true
+			if sel == "exclude" then
+				should_move = false
+			elseif sel == "include" then
+				should_move = true
+			elseif exclude_ids[src_data[si]] then
+				should_move = false
 			end
 
-			table.insert(move_list, {
-				from = from_pos,
-				to = to_pos,
-				id = src_data[si],
-				p2 = src_p2[si],
-				meta = meta_table,
-				timer = timer_data,
-			})
+			if should_move then
+				local from_pos = {x = x, y = y, z = z}
+				local to_pos = {x = x + offset.x, y = y + offset.y, z = z + offset.z}
 
-			-- Mark source as air
-			src_data[si] = c_air
-			src_p2[si] = 0
+				-- Save metadata and timer before we clear the source
+				local meta_table = minetest.get_meta(from_pos):to_table()
+				local timer = minetest.get_node_timer(from_pos)
+				local timer_data = nil
+				if timer:is_started() then
+					timer_data = {timeout = timer:get_timeout(), elapsed = timer:get_elapsed()}
+				end
+
+				table.insert(move_list, {
+					from = from_pos,
+					to = to_pos,
+					id = src_data[si],
+					p2 = src_p2[si],
+					meta = meta_table,
+					timer = timer_data,
+				})
+
+				-- Mark source as air
+				src_data[si] = c_air
+				src_p2[si] = 0
+			end
 		end
 	end end end
 
@@ -648,6 +823,9 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		meta:set_int("max_powerstorage", BASE_MAX_POWER)
 		meta:set_int("blanket_mode", 0)
 		meta:set_int("blanket_count", 0)
+		meta:set_string("blanket_excludes", "")       -- comma-separated node names to exclude
+		meta:set_string("blanket_selections", "")     -- serialized table of relative pos overrides
+		meta:set_int("formspec_tab", 1)               -- 1=Jump, 2=Blanket
 		meta:set_string("owner", "")
 		meta:set_string("infotext", "Dimensional Jumpdrive (not owned)")
 	end,
@@ -691,18 +869,26 @@ minetest.register_node("lazarus_space:jumpdrive", {
 		local source_pos1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
 		local source_pos2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
 
+		-- Color depends on whether select mode is active
+		local sdata = player_select_mode[pname]
+		local in_select = sdata and sdata.pos and vector.equals(sdata.pos, pos)
+		local color = in_select and "#00aaff" or "#00ff66"
+
 		if has_vizlib then
 			vizlib.draw_area(
 				{x = source_pos1.x - 0.5, y = source_pos1.y - 0.5, z = source_pos1.z - 0.5},
 				{x = source_pos2.x + 0.5, y = source_pos2.y + 0.5, z = source_pos2.z + 0.5},
-				{color = "#00ff66", player = puncher, time = 5})
+				{color = color, player = puncher, time = 5})
 		else
-			draw_particle_box(source_pos1, source_pos2, "#00ff66", pname, 5)
+			draw_particle_box(source_pos1, source_pos2, color, pname, 5)
 		end
 
-		minetest.chat_send_player(pname,
-			"Radius: " .. rx .. "x" .. ry .. "x" .. rz
-			.. " | Area: " .. (rx*2+1) .. "x" .. (ry*2+1) .. "x" .. (rz*2+1) .. " blocks")
+		local msg = "Radius: " .. rx .. "x" .. ry .. "x" .. rz
+			.. " | Area: " .. (rx*2+1) .. "x" .. (ry*2+1) .. "x" .. (rz*2+1) .. " blocks"
+		if in_select then
+			msg = msg .. " | " .. minetest.colorize("#00aaff", "SELECT MODE")
+		end
+		minetest.chat_send_player(pname, msg)
 	end,
 
 	on_metadata_inventory_put = function(pos, listname)
@@ -854,6 +1040,18 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 	-- Owner check
 	if meta:get_string("owner") ~= pname then return end
 
+	-- Tab switching
+	if fields.formspec_tab then
+		local tab = tonumber(fields.formspec_tab)
+		if tab then
+			meta:set_int("formspec_tab", tab)
+			minetest.show_formspec(pname,
+				"lazarus_space:jumpdrive_" .. minetest.pos_to_string(pos),
+				build_jumpdrive_formspec(pos, tab))
+		end
+		return
+	end
+
 	if fields.save then
 		save_fields(pos, fields)
 		meta:set_int("blanket_mode", 0)
@@ -941,40 +1139,6 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 
 		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
 
-	elseif fields.blanket then
-		save_fields(pos, fields)
-		local rx = meta:get_int("radius_x")
-		local ry = meta:get_int("radius_y")
-		local rz = meta:get_int("radius_z")
-		meta:set_int("radius", math.max(rx, ry, rz))
-
-		if meta:get_int("blanket_mode") == 1 then
-			-- Toggle OFF
-			meta:set_int("blanket_mode", 0)
-			meta:set_int("blanket_count", 0)
-			minetest.chat_send_player(pname, minetest.colorize("#666666",
-				"Blanket mode disabled"))
-		else
-			-- Toggle ON — scan and highlight
-			local count = scan_blanket(pos, pname)
-			minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
-				"Blanket scan: " .. count .. " blocks selected — press Jump to move them"))
-
-			-- Draw outer box outline
-			local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
-			local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
-			if has_vizlib and vizlib and vizlib.draw_area then
-				vizlib.draw_area(
-					{x = src1.x - 0.5, y = src1.y - 0.5, z = src1.z - 0.5},
-					{x = src2.x + 0.5, y = src2.y + 0.5, z = src2.z + 0.5},
-					{color = "#ffaa00", player = player, time = 8})
-			else
-				draw_particle_box(src1, src2, "#ffaa00", pname, 8)
-			end
-		end
-
-		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
-
 	elseif fields.jump then
 		save_fields(pos, fields)
 
@@ -984,32 +1148,191 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 		local max_radius = math.max(rx, ry, rz)
 		meta:set_int("radius", max_radius)
 
-		local blanket_active = meta:get_int("blanket_mode") == 1
-
-		if blanket_active then
-			-- Blanket jump: non-air blocks only
-			local success = execute_blanket_jump(pos, player)
+		-- Normal jump via jumpdrive API (blanket jump is on the Blanket tab)
+		if jumpdrive and jumpdrive.execute_jump then
+			local success, result = jumpdrive.execute_jump(pos, player)
 			if success then
-				minetest.close_formspec(pname, formname)
-			else
-				minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos))
-			end
-		else
-			-- Normal jump via jumpdrive API
-			if jumpdrive and jumpdrive.execute_jump then
-				local success, result = jumpdrive.execute_jump(pos, player)
-				if success then
-					minetest.chat_send_player(pname,
-						"Jump complete! (" .. (result or "?") .. " ms)")
-				else
-					minetest.chat_send_player(pname,
-						"Jump failed: " .. tostring(result))
-				end
+				minetest.chat_send_player(pname,
+					"Jump complete! (" .. (result or "?") .. " ms)")
 			else
 				minetest.chat_send_player(pname,
-					"Jumpdrive mod not available — cannot execute jump")
+					"Jump failed: " .. tostring(result))
 			end
+		else
+			minetest.chat_send_player(pname,
+				"Jumpdrive mod not available — cannot execute jump")
 		end
+
+	elseif fields.blanket_scan then
+		save_fields(pos, fields)
+		-- Save excludes field
+		if fields.blanket_excludes then
+			meta:set_string("blanket_excludes", fields.blanket_excludes)
+		end
+		local rx = meta:get_int("radius_x")
+		local ry = meta:get_int("radius_y")
+		local rz = meta:get_int("radius_z")
+		meta:set_int("radius", math.max(rx, ry, rz))
+
+		local count = scan_blanket(pos, pname)
+		minetest.chat_send_player(pname, minetest.colorize("#ffaa00",
+			"Blanket scan: " .. count .. " blocks selected"))
+
+		-- Draw outer box outline
+		local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+		local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+		if has_vizlib and vizlib and vizlib.draw_area then
+			vizlib.draw_area(
+				{x = src1.x - 0.5, y = src1.y - 0.5, z = src1.z - 0.5},
+				{x = src2.x + 0.5, y = src2.y + 0.5, z = src2.z + 0.5},
+				{color = "#ffaa00", player = player, time = 8})
+		else
+			draw_particle_box(src1, src2, "#ffaa00", pname, 8)
+		end
+
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.blanket_clear then
+		meta:set_int("blanket_mode", 0)
+		meta:set_int("blanket_count", 0)
+		-- Also exit select mode for this player
+		player_select_mode[pname] = nil
+		minetest.chat_send_player(pname, minetest.colorize("#666666",
+			"Blanket cleared"))
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.select_mode then
+		if player_select_mode[pname] and player_select_mode[pname].pos
+				and vector.equals(player_select_mode[pname].pos, pos) then
+			-- Toggle OFF
+			player_select_mode[pname] = nil
+			minetest.chat_send_player(pname, minetest.colorize("#666666",
+				"Select mode OFF — normal punch restored"))
+		else
+			-- Toggle ON
+			player_select_mode[pname] = {pos = vector.new(pos)}
+			minetest.chat_send_player(pname, minetest.colorize("#00aaff",
+				"Select mode ON — punch blocks to include/exclude them"))
+		end
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.sel_include or fields.sel_exclude then
+		local rx_val = tonumber(fields.sel_rx)
+		local ry_val = tonumber(fields.sel_ry)
+		local rz_val = tonumber(fields.sel_rz)
+		if rx_val and ry_val and rz_val then
+			rx_val = math.floor(rx_val)
+			ry_val = math.floor(ry_val)
+			rz_val = math.floor(rz_val)
+			local key = rx_val .. "," .. ry_val .. "," .. rz_val
+			local selections_str = meta:get_string("blanket_selections")
+			local selections = {}
+			if selections_str ~= "" then
+				selections = minetest.deserialize(selections_str) or {}
+			end
+			local mode = fields.sel_include and "include" or "exclude"
+			selections[key] = mode
+			meta:set_string("blanket_selections", minetest.serialize(selections))
+			minetest.chat_send_player(pname, minetest.colorize(
+				mode == "include" and "#00ff66" or "#ff3333",
+				"Position (" .. key .. ") set to " .. mode))
+		else
+			minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+				"Invalid coordinates — enter numbers"))
+		end
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.clear_selections then
+		meta:set_string("blanket_selections", "")
+		minetest.chat_send_player(pname, minetest.colorize("#666666",
+			"All position selections cleared"))
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.remove_excludes then
+		meta:set_string("blanket_excludes", "")
+		minetest.chat_send_player(pname, minetest.colorize("#666666",
+			"All node exclusions cleared"))
+		minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+
+	elseif fields.jump_blanket then
+		-- Save excludes field if present
+		if fields.blanket_excludes then
+			meta:set_string("blanket_excludes", fields.blanket_excludes)
+		end
+		save_fields(pos, fields)
+		local rx = meta:get_int("radius_x")
+		local ry = meta:get_int("radius_y")
+		local rz = meta:get_int("radius_z")
+		meta:set_int("radius", math.max(rx, ry, rz))
+
+		-- Force blanket mode on if not already (scan first if needed)
+		if meta:get_int("blanket_mode") ~= 1 then
+			scan_blanket(pos, pname)
+		end
+
+		local success = execute_blanket_jump(pos, player)
+		if success then
+			player_select_mode[pname] = nil  -- clear select mode after jump
+			minetest.close_formspec(pname, formname)
+		else
+			minetest.show_formspec(pname, formname, build_jumpdrive_formspec(pos, 2))
+		end
+	end
+end)
+
+-- ============================================================
+-- FLEET CONTROLLER COMPATIBILITY
+-- ============================================================
+
+-- Override fleet controller's engine discovery to include our jumpdrive
+-- The original find_engines only searches for "jumpdrive:engine"
+minetest.register_on_mods_loaded(function()
+	if not jumpdrive or not jumpdrive.fleet then return end
+
+	-- Store reference to original if it exists
+	local orig_find_engines = jumpdrive.fleet.find_engines
+
+	if orig_find_engines then
+		jumpdrive.fleet.find_engines = function(pos, visited_hashes, engine_list)
+			visited_hashes = visited_hashes or {}
+			engine_list = engine_list or {}
+
+			local hash = minetest.hash_node_position(pos)
+			if visited_hashes[hash] then
+				return engine_list
+			end
+			visited_hashes[hash] = true
+
+			local pos1 = {x = pos.x - 1, y = pos.y - 1, z = pos.z - 1}
+			local pos2 = {x = pos.x + 1, y = pos.y + 1, z = pos.z + 1}
+
+			-- Search for both standard engines AND our dimensional jumpdrive
+			local engine_nodes = minetest.find_nodes_in_area(pos1, pos2,
+				{"jumpdrive:engine", "lazarus_space:jumpdrive"})
+			for _, epos in ipairs(engine_nodes) do
+				local ehash = minetest.hash_node_position(epos)
+				if not visited_hashes[ehash] then
+					visited_hashes[ehash] = true
+					table.insert(engine_list, epos)
+					-- Recurse from engine position to find more via backbone
+					jumpdrive.fleet.find_engines(epos, visited_hashes, engine_list)
+				end
+			end
+
+			-- Traverse backbone nodes
+			local backbone_nodes = minetest.find_nodes_in_area(pos1, pos2,
+				{"jumpdrive:backbone"})
+			for _, bpos in ipairs(backbone_nodes) do
+				local bhash = minetest.hash_node_position(bpos)
+				if not visited_hashes[bhash] then
+					jumpdrive.fleet.find_engines(bpos, visited_hashes, engine_list)
+				end
+			end
+
+			return engine_list
+		end
+
+		minetest.log("action", "[lazarus_space] Patched fleet controller engine discovery")
 	end
 end)
 
@@ -1025,3 +1348,87 @@ minetest.register_craft({
 		{"jumpdrive:warp_device", "technic:stainless_steel_block", "jumpdrive:warp_device"},
 	},
 })
+
+-- ============================================================
+-- SELECT MODE: punch blocks to toggle include/exclude
+-- ============================================================
+
+minetest.register_on_punchnode(function(punch_pos, node, puncher, pointed_thing)
+	if not puncher or not puncher:is_player() then return end
+	local pname = puncher:get_player_name()
+
+	local sdata = player_select_mode[pname]
+	if not sdata or not sdata.pos then return end
+
+	local drive_pos = sdata.pos
+	local drive_meta = minetest.get_meta(drive_pos)
+
+	-- Verify the jumpdrive still exists and player owns it
+	local drive_node = minetest.get_node(drive_pos)
+	if drive_node.name ~= "lazarus_space:jumpdrive" then
+		player_select_mode[pname] = nil
+		return
+	end
+	if drive_meta:get_string("owner") ~= pname then
+		player_select_mode[pname] = nil
+		return
+	end
+
+	-- Check if punched position is within the drive's radius
+	local rx = drive_meta:get_int("radius_x")
+	local ry = drive_meta:get_int("radius_y")
+	local rz = drive_meta:get_int("radius_z")
+
+	local rel_x = punch_pos.x - drive_pos.x
+	local rel_y = punch_pos.y - drive_pos.y
+	local rel_z = punch_pos.z - drive_pos.z
+
+	if math.abs(rel_x) > rx or math.abs(rel_y) > ry or math.abs(rel_z) > rz then
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"Block is outside radius — not toggled"))
+		return
+	end
+
+	-- Toggle the selection for this relative position
+	local key = rel_x .. "," .. rel_y .. "," .. rel_z
+	local selections_str = drive_meta:get_string("blanket_selections")
+	local selections = {}
+	if selections_str ~= "" then
+		selections = minetest.deserialize(selections_str) or {}
+	end
+
+	local new_mode
+	if selections[key] == "exclude" then
+		-- Was excluded → include (or remove override to use default)
+		selections[key] = nil
+		new_mode = "default"
+	elseif selections[key] == "include" then
+		-- Was explicitly included → exclude
+		selections[key] = "exclude"
+		new_mode = "exclude"
+	else
+		-- No override → exclude
+		selections[key] = "exclude"
+		new_mode = "exclude"
+	end
+
+	drive_meta:set_string("blanket_selections", minetest.serialize(selections))
+
+	-- Visual feedback: color coded particle on the punched block
+	if new_mode == "exclude" then
+		draw_block_outline(punch_pos.x, punch_pos.y, punch_pos.z,
+			"#ff3333", pname, 4, 2)
+		minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+			"Excluded (" .. key .. ")"))
+	else
+		draw_block_outline(punch_pos.x, punch_pos.y, punch_pos.z,
+			"#00ff66", pname, 4, 2)
+		minetest.chat_send_player(pname, minetest.colorize("#00ff66",
+			"Restored (" .. key .. ") to default"))
+	end
+end)
+
+-- Clean up select mode when player leaves
+minetest.register_on_leaveplayer(function(player)
+	player_select_mode[player:get_player_name()] = nil
+end)
