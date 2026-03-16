@@ -219,22 +219,25 @@ local function build_jumpdrive_formspec(pos, tab_override)
 		fs = fs .. "label[0.4,7.42;" .. minetest.colorize("#aaaaaa",
 			"Owner: " .. meta:get_string("owner")) .. "]"
 
-		-- Blanket status on Jump tab
+		-- Blanket status on Jump tab (always shown for consistent layout)
 		if blanket_on then
 			local bcount = meta:get_int("blanket_count")
 			fs = fs .. "label[0.4,7.78;" .. minetest.colorize("#ffaa00",
-				"Blanket: ON (" .. bcount .. " blocks) — Jump will move selected blocks only") .. "]"
+				"Blanket: ON (" .. bcount .. " blocks) — Jump moves selected blocks only") .. "]"
+		else
+			fs = fs .. "label[0.4,7.78;" .. minetest.colorize("#666666",
+				"Blanket: OFF") .. "]"
 		end
 
 		-- Books (4 slots) and Upgrades (4 slots) on one line with gap
-		fs = fs .. "label[0.4,7.9;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
-		fs = fs .. "label[6.8,7.9;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
-		fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.2;4,1;]"
-		fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,8.2;4,1;]"
+		fs = fs .. "label[0.4,8.24;" .. minetest.colorize("#aaaaaa", "Books:") .. "]"
+		fs = fs .. "label[6.8,8.24;" .. minetest.colorize("#aaaaaa", "Upgrades:") .. "]"
+		fs = fs .. "list[nodemeta:" .. pos_str .. ";main;0.4,8.54;4,1;]"
+		fs = fs .. "list[nodemeta:" .. pos_str .. ";upgrade;6.8,8.54;4,1;]"
 
 		-- Player inventory (centered)
-		fs = fs .. "list[current_player;main;1.3,9.56;8,1;]"
-			.. "list[current_player;main;1.3,10.81;8,3;8]"
+		fs = fs .. "list[current_player;main;1.3,9.9;8,1;]"
+			.. "list[current_player;main;1.3,11.15;8,3;8]"
 
 		-- Shift-click targets
 		fs = fs .. "listring[nodemeta:" .. pos_str .. ";main]"
@@ -280,19 +283,19 @@ local function build_jumpdrive_formspec(pos, tab_override)
 		fs = fs .. "field[0.4,3.3;11,0.8;blanket_excludes;Exclude Nodes (comma-separated);" .. minetest.formspec_escape(excludes) .. "]"
 
 		-- Relative coordinate selection — label above, fields below with gap
-		fs = fs .. "label[0.4,4.16;" .. minetest.colorize("#aaaaaa", "Relative Position (offset from drive):") .. "]"
-		fs = fs .. "field[0.4,4.9;2.6,0.8;sel_rx;X;0]"
-		fs = fs .. "field[3.2,4.9;2.6,0.8;sel_ry;Y;0]"
-		fs = fs .. "field[6.0,4.9;2.6,0.8;sel_rz;Z;0]"
-		fs = fs .. "button[8.8,4.9;1.6,0.8;sel_include;Include]"
-		fs = fs .. "button[10.5,4.9;1.5,0.8;sel_exclude;Exclude]"
+		fs = fs .. "label[0.4,4.46;" .. minetest.colorize("#aaaaaa", "Relative Position (offset from drive):") .. "]"
+		fs = fs .. "field[0.4,5.2;2.6,0.8;sel_rx;X;0]"
+		fs = fs .. "field[3.2,5.2;2.6,0.8;sel_ry;Y;0]"
+		fs = fs .. "field[6.0,5.2;2.6,0.8;sel_rz;Z;0]"
+		fs = fs .. "button[8.8,5.2;1.6,0.8;sel_include;Include]"
+		fs = fs .. "button[10.5,5.2;1.5,0.8;sel_exclude;Exclude]"
 
 		-- Status
 		if blanket_active then
-			fs = fs .. "label[0.4,6.1;" .. minetest.colorize("#ffaa00",
+			fs = fs .. "label[0.4,6.4;" .. minetest.colorize("#ffaa00",
 				"Blanket: ACTIVE (" .. bcount .. " blocks)") .. "]"
 		else
-			fs = fs .. "label[0.4,6.1;" .. minetest.colorize("#666666",
+			fs = fs .. "label[0.4,6.4;" .. minetest.colorize("#666666",
 				"Blanket: OFF") .. "]"
 		end
 
@@ -315,25 +318,25 @@ local function build_jumpdrive_formspec(pos, tab_override)
 			table.insert(excl_list, name)
 		end
 
-		fs = fs .. "label[0.4,6.46;" .. minetest.colorize("#aaaaaa",
+		fs = fs .. "label[0.4,6.76;" .. minetest.colorize("#aaaaaa",
 			"Node exclusions: " .. #excl_list .. " | Pos includes: " .. include_count
 			.. " | Pos excludes: " .. exclude_count) .. "]"
 
 		-- Power status (compact)
 		local power_color = stored >= power_needed and "#00ff66" or "#ff3333"
-		fs = fs .. "label[0.4,6.92;" .. minetest.colorize("#aaaaaa",
+		fs = fs .. "label[0.4,7.12;" .. minetest.colorize("#aaaaaa",
 			"Power: ") .. minetest.colorize(power_color,
 			stored .. " / " .. power_needed .. " EU")
 			.. "  " .. minetest.colorize("#aaaaaa",
 			"Radius: " .. rx .. "x" .. ry .. "x" .. rz) .. "]"
 
 		-- Clear selections button
-		fs = fs .. "button[0.4,7.4;5.3,0.8;clear_selections;Clear All Selections]"
-		fs = fs .. "button[5.9,7.4;5.5,0.8;remove_excludes;Clear All Exclusions]"
+		fs = fs .. "button[0.4,7.6;5.3,0.8;clear_selections;Clear All Selections]"
+		fs = fs .. "button[5.9,7.6;5.5,0.8;remove_excludes;Clear All Exclusions]"
 
 		-- Player inventory (centered)
-		fs = fs .. "list[current_player;main;1.3,8.76;8,1;]"
-			.. "list[current_player;main;1.3,10.01;8,3;8]"
+		fs = fs .. "list[current_player;main;1.3,8.96;8,1;]"
+			.. "list[current_player;main;1.3,10.21;8,3;8]"
 	end
 
 	return fs
