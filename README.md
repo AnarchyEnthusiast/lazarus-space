@@ -4,9 +4,13 @@ End-game Technic mod for Minetest — fusion reactors, interdimensional portals,
 
 ## Dependencies
 
+**Required:**
 - **Technic** — HV power network
 - **Jumpdrive** — Warp device base
 - **Default** — Standard nodes and items
+
+**Optional:**
+- **Vizlib** — Enhanced box outline visualizations for jumpdrive preflight and radius display (falls back to particle outlines without it)
 
 ## Features
 
@@ -34,11 +38,29 @@ Enhanced jumpdrive with independent X/Y/Z radius (1–15 each), HV powered with 
 
 ### Biological Dimension
 
-Full terrain generation layer (y=26927–29200) with organic caves, a plasma ocean, 7 surface biomes, upper asteroid fields, ceiling caves, stalactites, and a tungsten ore system.
+A massive organic interior dimension spanning y=26927–29200, accessed through the Lazarus Portal. The terrain is procedurally generated using layered Perlin noise with a modular biome system.
 
-**Biomes:** Abscess Marsh, Coral Cliffs, Follicle Forest, Molar Peaks, Nerve Thicket, Rib Fields, Vein Flats.
+**Layers (bottom to top):**
+- **Frozen Asteroid Field** (y=26927–26997) — Ice-encrusted asteroids drifting in void
+- **Death Space** (y=26997–27006) — Thin empty buffer zone
+- **Organic Caves** (y=27006–27697) — Vast cavern network carved from flesh and bone, with glowing mushrooms, cave vines, and stalactites. Bile and pus liquid pools on the floor
+- **Jelly Membrane** (y=27697–27712) — Translucent barrier separating caves from the plasma ocean
+- **Plasma Ocean** (y=27702–27775) — Liquid plasma sea with a noise-shaped barrier floor
+- **Surface** (y=27775+) — 7 distinct biomes with varied terrain, vegetation, and resources
+- **Upper Asteroid Field** (y=27904–28693) — Livable spheroid asteroids with their own ecosystems
+- **Ceiling Caves** (y=28793–29193) — Inverted cave system with hanging stalactites
+- **Ceiling Membrane** (y=29193–29200) — Top boundary cap
 
-~40 custom nodes including flesh, bone, cartilage, nerve, bile/pus/marrow liquids, glowing mushrooms, and more. Custom skybox and fog.
+**Surface Biomes:**
+- **Abscess Marsh** — Wet infected terrain with pus pools and necrotic patches
+- **Coral Cliffs** — Brain coral formations and lung coral growths
+- **Follicle Forest** — Hair strand trees with keratin trunks and follicle sheaths
+- **Molar Peaks** — Towering enamel and dentin tooth-like mountains
+- **Nerve Thicket** — Dense nerve fiber networks with glowing myelin sheaths
+- **Rib Fields** — Exposed skeletal ribs jutting from flesh terrain
+- **Vein Flats** — Flat vascular plains with vein intersections and capillary surfaces
+
+~40 custom nodes (flesh, bone, cartilage, sinew, nerve, enamel, membrane, marrow, bile, pus, plasma liquids, glowing mushrooms, cave vines, tungsten ore, and more). Custom skybox and fog. Tungsten ore system for mining and smelting.
 
 ## File Structure
 
