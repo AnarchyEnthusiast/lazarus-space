@@ -99,3 +99,66 @@ A massive organic interior dimension spanning y=26927–29200, accessed through 
 - [ ] Home portal — return gate from dimension
 - [ ] MV/HV melt functionality
 - [ ] Anti-teleportation within Lazarus dimension
+
+## Known Issues & Optimization Backlog
+
+### Critical Bugs
+
+- [ ] **bio_mapgen.lua:1010-1013** — Dead if/else branch: both paths assign `c.stone`, hollow asteroid shells have no material variety. One branch should use a different material.
+- [ ] **bio_nodes.lua** — Plasma source registered with `groups = {water = 3}`, bucket mods treat it as water. Remove water group, keep only `liquid = 3`.
+- [ ] **crafting3d.lua** — Test recipe (dirt ring → mese) left in production code. Remove it.
+- [ ] **crafting3d.lua** — API named `register_6x6_craft` / `find_6x6_craft` but grid is actually 5x5. Rename to match.
+
+### Critical Performance
+
+- [ ] **field.lua** — Charging particle rings spawn ~4,800 particles every 0.1s (48K/sec). Use `add_particlespawner()` instead of individual `add_particle()` calls.
+- [ ] **field.lua** — `explode()` and `deploy_field()` use per-block `set_node()` instead of VoxelManip. Batch with VM for thousands of nodes.
+- [ ] **bio_mapgen.lua** — Egg clusters and spine trees use `set_node()` per-block inside mapgen. Use `bulk_set_node()` or a second VoxelManip pass.
+- [ ] **bio_mapgen.lua** — 5 separate floating block cleanup passes each iterate the full chunk (~2.5M voxel reads total). Consolidate into one pass.
+- [ ] **reactor.lua:349-361** — `find_pole_corrector` iterates 9,261 positions with `get_node()`. Use `find_nodes_in_area()` instead.
+
+### Important Bugs
+
+- [ ] **jumpdrive.lua:1024-1028** — After-jump network invalidation averages source+destination positions, producing a midpoint in neither network. Invalidate both centers independently.
+- [ ] **nodes.lua** — Base `disrupted_space` may lack `use_texture_alpha = "blend"` while all 20 variants have it.
+- [ ] **crafting3d.lua** — Functions named 6x6 but implement 5x5 grid. Rename for clarity.
+- [ ] **portal_guide.lua** — Page 1 (setup) and page 2 (overview) appear reversed. Overview should come first.
+- [ ] **bio_nodes.lua** — Cave vine ABM recalculates random `max_length` every tick instead of storing in metadata.
+
+### Important Correctness
+
+- [ ] **portal.lua** — Teleportation picks random coordinates with no safety check (could land in solid terrain or lava). Add destination validation.
+- [ ] **jumpdrive.lua** — No `minetest.is_protected()` checks on blanket jump source/destination.
+- [ ] **reactor.lua** — Power output registered on LV/MV/HV simultaneously. Should register only HV.
+- [ ] **field.lua** — `cold_collapse` and `teardown_field` have duplicated but slightly different cleanup code. Extract shared helper.
+- [ ] **bio_mapgen.lua** — Column height neighbor lookups can go out of bounds at chunk edges. Document or restrict iteration range.
+
+### Important Code Quality
+
+- [ ] **guide.lua + portal_guide.lua** — Duplicated helper functions (`styled_btn`, `page_header`). Move to shared file.
+- [ ] **bio_mapgen.lua** — Entire mapgen is one 2,585-line function. Extract layers into separate helpers.
+- [ ] **Biome files** — Inconsistent content ID access patterns (upvalues vs ctx.c.xxx). Standardize.
+- [ ] **generate_textures.py** — Plasma diagnostic texture is 205x8200px (40 frames). Consider reducing.
+
+### Important Gameplay
+
+- [ ] **bio_nodes.lua** — `death_space` has empty groups, making it indestructible with no escape if trapped.
+- [ ] **Biological dimension** — No return mechanism after portal teleport. Players could be stranded.
+- [ ] **reactor.lua** — No fuel consumption rate documentation in-game. Add to guide book.
+
+### Important Compatibility
+
+- [ ] **jumpdrive.lua** — Heavy dependency on optional jumpdrive mod API with no version checking. Add warnings for missing functions.
+- [ ] **reactor.lua** — Uses technic mod internals that can change between versions. Document required version.
+- [ ] **mod.conf** — Should list `optional_depends = vizlib`.
+
+### Minor
+
+- [ ] Duplicated `pos_hash()` across multiple biome files. Define once in init.lua.
+- [ ] Duplicated `face_subsets` between nodes.lua and field.lua. Centralize.
+- [ ] Abscess marsh biome has no light sources — total darkness.
+- [ ] Magic numbers scattered without named constants.
+- [ ] Player observation globalstep has no max distance check.
+- [ ] Dual time tracking in portal.lua (get_us_time + dtime). Use one method.
+- [ ] Jumpdrive radius limit (1-15) not explained in formspec.
+- [ ] bio_generate_textures.py has dead code branches for unused special types.
