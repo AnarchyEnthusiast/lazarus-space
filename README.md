@@ -2,6 +2,8 @@
 
 End-game Technic mod for Minetest — fusion reactors, interdimensional portals, a biological dimension, and an enhanced jumpdrive.
 
+**This mod is a work in progress. Expect bugs, incomplete features, and breaking changes.**
+
 ## Dependencies
 
 **Required:**
@@ -83,3 +85,17 @@ A massive organic interior dimension spanning y=26927–29200, accessed through 
 | `generate_textures.py` | Texture generation |
 | `bio_generate_textures.py` | Bio dimension texture generation |
 | `generate_models.py` | Guide book 3D models |
+
+## TODO
+
+- [ ] Hazmat spacesuit for dimension survival
+- [ ] Rover vehicle (maybe?)
+- [ ] Tungsten uses — armor, tools, etc.
+- [ ] Crafting recipes for reactor, jumpdrive, and crafting table
+- [ ] Finish compatibility checks with Pandorabox
+- [ ] Vacuum mechanics in space/dimension
+- [ ] Hostile mobs / monsters
+- [ ] Generated structures in the biological dimension
+- [ ] Home portal — return gate from dimension
+- [ ] MV/HV melt functionality
+- [ ] Anti-teleportation within Lazarus dimension
