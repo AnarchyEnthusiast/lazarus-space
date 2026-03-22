@@ -253,13 +253,7 @@ end)
 -- Utility Functions
 -- =============================================================================
 
--- Improved deterministic position hash (breaks diagonal patterns)
-local function pos_hash(x, y, z)
-	local h = (x * 374761393 + y * 668265263 + z * 83492791) % 2147483647
-	h = ((h * 1103515245) + 12345) % 2147483647
-	h = ((h * 1103515245) + 12345) % 2147483647
-	return h
-end
+local pos_hash = lazarus_space.pos_hash
 
 local function pos_hash_2d(x, z, seed)
 	seed = seed or 0
@@ -1343,61 +1337,95 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		end
 	end
 
-	-- Marrow cave floating block cleanup: remove isolated blocks with 5+ air neighbors
-	if has_caves then
-		local cave_y_min = math_max(minp.y, ORGANIC_CAVE_MIN)
-		local cave_y_max = math_min(maxp.y, PLASMA_BARRIER_BOTTOM_MIN - 1)
-		if cave_y_min + 1 <= cave_y_max - 1 then
-			for z = minp.z + 1, maxp.z - 1 do
-				for y = cave_y_min + 1, cave_y_max - 1 do
-					for x = minp.x + 1, maxp.x - 1 do
-						local vi = area:index(x, y, z)
-						local node_id = data[vi]
-						if node_id ~= c.air and node_id ~= c.bile_source and node_id ~= c.marrow_source then
-							local air_count = 0
-							if data[area:index(x+1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x-1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y+1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y-1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z+1)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z-1)] == c.air then air_count = air_count + 1 end
-							if air_count >= 5 then
-								data[vi] = c.air
-							end
-						end
-					end
-				end
-			end
-		end
-	end
+	-- Consolidated floating block cleanup: single pass for cave + asteroid zones
+	-- Replaces 5 separate passes (marrow cave, cave transition, lower asteroid,
+	-- full asteroid fragment suppression, sinew cleanup)
+	if has_caves or has_upper_ast then
+		-- Y-range boundaries for each zone
+		local cave_y_min  = has_caves     and math_max(minp.y + 1, ORGANIC_CAVE_MIN)       or 0
+		local cave_y_max  = has_caves     and math_min(maxp.y - 1, PLASMA_BARRIER_BOTTOM_MIN - 1) or -1
+		local ast_y_min   = has_upper_ast and math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30) or 0
+		local ast_y_max   = has_upper_ast and math_min(maxp.y - 1, UPPER_ASTEROID_MAX + 25) or -1
+		local ast_lower_top = UPPER_ASTEROID_MIN + 400
 
-	-- Cave transition zone floating block cleanup: 2-pass removal in transition zones
-	-- Only affects blocks where cave_biome noise is in transition ranges (-0.4 to -0.2 and 0.2 to 0.4)
-	if has_caves then
-		local trans_y_min = math_max(minp.y + 1, ORGANIC_CAVE_MIN)
-		local trans_y_max = math_min(maxp.y - 1, PLASMA_BARRIER_BOTTOM_MIN - 1)
-		if trans_y_min <= trans_y_max then
-			for pass = 1, 2 do
-				for z = minp.z + 1, maxp.z - 1 do
-					local ni2d_t = (z - minp.z) * sidelen + 1
-					for x = minp.x + 1, maxp.x - 1 do
-						local ni2d_col = ni2d_t + (x - minp.x)
-						local cbv = nbuf.cave_biome[ni2d_col]
-						-- Only process transition zones
-						if (cbv >= -0.4 and cbv < -0.2) or (cbv >= 0.2 and cbv < 0.4) then
-							for y = trans_y_min, trans_y_max do
-								local vi = area:index(x, y, z)
-								local node_id = data[vi]
-								if node_id ~= c.air and node_id ~= c.bile_source and node_id ~= c.marrow_source then
+		-- Combined y-range spanning both zones
+		local combined_y_min = math_min(cave_y_min, ast_y_min)
+		local combined_y_max = math_max(cave_y_max, ast_y_max)
+		if not has_caves     then combined_y_min = ast_y_min  end
+		if not has_upper_ast then combined_y_max = cave_y_max end
+
+		-- Cached content IDs for inner-loop comparisons
+		local c_air          = c.air
+		local c_ignore       = c.ignore
+		local c_bile_source  = c.bile_source
+		local c_marrow_source = c.marrow_source
+		local c_sinew        = c.sinew
+
+		if combined_y_min <= combined_y_max and minp.x + 1 <= maxp.x - 1 then
+			for z = minp.z + 1, maxp.z - 1 do
+				for y = combined_y_min, combined_y_max do
+					local in_cave = has_caves     and y >= cave_y_min and y <= cave_y_max
+					local in_ast  = has_upper_ast and y >= ast_y_min  and y <= ast_y_max
+
+					if in_cave or in_ast then
+						for x = minp.x + 1, maxp.x - 1 do
+							local vi = area:index(x, y, z)
+							local node_id = data[vi]
+
+							if node_id ~= c_air then
+								local removed = false
+
+								-- Cave zone: remove blocks with 5+ air neighbors (skip liquids)
+								if in_cave and node_id ~= c_bile_source and node_id ~= c_marrow_source then
 									local air_count = 0
-									if data[area:index(x+1,y,z)] == c.air then air_count = air_count + 1 end
-									if data[area:index(x-1,y,z)] == c.air then air_count = air_count + 1 end
-									if data[area:index(x,y+1,z)] == c.air then air_count = air_count + 1 end
-									if data[area:index(x,y-1,z)] == c.air then air_count = air_count + 1 end
-									if data[area:index(x,y,z+1)] == c.air then air_count = air_count + 1 end
-									if data[area:index(x,y,z-1)] == c.air then air_count = air_count + 1 end
+									if data[area:index(x+1,y,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x-1,y,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y+1,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y-1,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y,z+1)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y,z-1)] == c_air then air_count = air_count + 1 end
 									if air_count >= 5 then
-										data[vi] = c.air
+										data[vi] = c_air
+										removed = true
+									end
+								end
+
+								-- Asteroid zone (only if not already removed)
+								if in_ast and not removed then
+									if node_id == c_sinew then
+										-- Sinew cleanup: remove sinew with <2 solid non-sinew neighbors
+										local solid_count = 0
+										local nid
+										nid = data[area:index(x+1,y,z)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										nid = data[area:index(x-1,y,z)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										nid = data[area:index(x,y+1,z)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										nid = data[area:index(x,y-1,z)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										nid = data[area:index(x,y,z+1)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										nid = data[area:index(x,y,z-1)]
+										if nid ~= c_air and nid ~= c_sinew and nid ~= c_ignore then solid_count = solid_count + 1 end
+										if solid_count < 2 then
+											data[vi] = c_air
+										end
+									else
+										-- Fragment suppression: count air neighbors
+										local air_count = 0
+										if data[area:index(x+1,y,z)] == c_air then air_count = air_count + 1 end
+										if data[area:index(x-1,y,z)] == c_air then air_count = air_count + 1 end
+										if data[area:index(x,y+1,z)] == c_air then air_count = air_count + 1 end
+										if data[area:index(x,y-1,z)] == c_air then air_count = air_count + 1 end
+										if data[area:index(x,y,z+1)] == c_air then air_count = air_count + 1 end
+										if data[area:index(x,y,z-1)] == c_air then air_count = air_count + 1 end
+										-- Lower asteroid zone (stricter): 5+ air neighbors
+										-- Full asteroid zone: 4+ air neighbors (fragment suppression)
+										local threshold = (y <= ast_lower_top) and 5 or 4
+										if air_count >= threshold then
+											data[vi] = c_air
+										end
 									end
 								end
 							end
@@ -1405,88 +1433,31 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 					end
 				end
 			end
-		end
-	end
 
-	-- Lower asteroid floating block cleanup: bottom 400 blocks of asteroid field
-	if has_upper_ast then
-		local lower_zone_top = UPPER_ASTEROID_MIN + 400
-		local ast_y_min = math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30)
-		local ast_y_max = math_min(maxp.y - 1, lower_zone_top)
-		if ast_y_min <= ast_y_max and minp.x + 1 <= maxp.x - 1 then
-			for z = minp.z + 1, maxp.z - 1 do
-				for y = ast_y_min, ast_y_max do
+			-- Cave transition zone 2nd pass: extra cleanup in biome transition columns
+			-- Re-processes transition-noise columns to catch blocks newly exposed by main pass
+			if has_caves and cave_y_min <= cave_y_max then
+				for z = minp.z + 1, maxp.z - 1 do
+					local ni2d_t = (z - minp.z) * sidelen + 1
 					for x = minp.x + 1, maxp.x - 1 do
-						local vi = area:index(x, y, z)
-						local node_id = data[vi]
-						if node_id ~= c.air then
-							local air_count = 0
-							if data[area:index(x+1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x-1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y+1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y-1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z+1)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z-1)] == c.air then air_count = air_count + 1 end
-							if air_count >= 5 then
-								data[vi] = c.air
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-
-	-- Full asteroid field fragment suppression: remove tiny isolated asteroid fragments
-	-- Eliminates small 1-3 block fragments across the entire upper asteroid range
-	if has_upper_ast then
-		local frag_y_min = math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30)
-		local frag_y_max = math_min(maxp.y - 1, UPPER_ASTEROID_MAX + 25)
-		if frag_y_min <= frag_y_max and minp.x + 1 <= maxp.x - 1 then
-			for z = minp.z + 1, maxp.z - 1 do
-				for y = frag_y_min, frag_y_max do
-					for x = minp.x + 1, maxp.x - 1 do
-						local vi = area:index(x, y, z)
-						local node_id = data[vi]
-						if node_id ~= c.air then
-							local air_count = 0
-							if data[area:index(x+1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x-1,y,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y+1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y-1,z)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z+1)] == c.air then air_count = air_count + 1 end
-							if data[area:index(x,y,z-1)] == c.air then air_count = air_count + 1 end
-							-- Remove blocks with 4+ air neighbors (small fragments)
-							if air_count >= 4 then
-								data[vi] = c.air
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-
-	-- Sinew cleanup: remove sinew blocks with fewer than 2 solid non-sinew neighbors
-	if has_upper_ast then
-		local sinew_y_min = math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30)
-		local sinew_y_max = math_min(maxp.y - 1, UPPER_ASTEROID_MAX + 25)
-		if sinew_y_min <= sinew_y_max and minp.x + 1 <= maxp.x - 1 then
-			for z = minp.z + 1, maxp.z - 1 do
-				for y = sinew_y_min, sinew_y_max do
-					for x = minp.x + 1, maxp.x - 1 do
-						local vi = area:index(x, y, z)
-						if data[vi] == c.sinew then
-							local solid_count = 0
-							for _, dv in ipairs({{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}}) do
-								local nvi = area:index(x+dv[1], y+dv[2], z+dv[3])
-								local nid = data[nvi]
-								if nid ~= c.air and nid ~= c.sinew and nid ~= c.ignore then
-									solid_count = solid_count + 1
+						local ni2d_col = ni2d_t + (x - minp.x)
+						local cbv = nbuf.cave_biome[ni2d_col]
+						if (cbv >= -0.4 and cbv < -0.2) or (cbv >= 0.2 and cbv < 0.4) then
+							for y = cave_y_min, cave_y_max do
+								local vi = area:index(x, y, z)
+								local node_id = data[vi]
+								if node_id ~= c_air and node_id ~= c_bile_source and node_id ~= c_marrow_source then
+									local air_count = 0
+									if data[area:index(x+1,y,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x-1,y,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y+1,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y-1,z)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y,z+1)] == c_air then air_count = air_count + 1 end
+									if data[area:index(x,y,z-1)] == c_air then air_count = air_count + 1 end
+									if air_count >= 5 then
+										data[vi] = c_air
+									end
 								end
-							end
-							if solid_count < 2 then
-								data[vi] = c.air
 							end
 						end
 					end
@@ -2304,6 +2275,9 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		local egg_count = 0
 		local MAX_EGGS_PER_CHUNK = 2
 
+		local egg_shell_positions = {}
+		local egg_core_positions = {}
+
 		local ni2d_egg = 0
 		for z = minp.z, maxp.z do
 			for x = minp.x, maxp.x do
@@ -2363,9 +2337,9 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 									-- Only place in air or on surface blocks
 									if existing.name == "air" or ey <= surface_y then
 										if edist_sq > (egg_r - 1) * (egg_r - 1) then
-											minetest.set_node(epos, {name = "lazarus_space:congealed_plasma"})
+											egg_shell_positions[#egg_shell_positions + 1] = epos
 										else
-											minetest.set_node(epos, {name = "lazarus_space:mucus"})
+											egg_core_positions[#egg_core_positions + 1] = epos
 										end
 									end
 								end
@@ -2379,6 +2353,14 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 			end
 			if egg_count >= MAX_EGGS_PER_CHUNK then break end
 		end
+
+		-- Flush batched egg cluster nodes
+		if #egg_shell_positions > 0 then
+			minetest.bulk_set_node(egg_shell_positions, {name = "lazarus_space:congealed_plasma"})
+		end
+		if #egg_core_positions > 0 then
+			minetest.bulk_set_node(egg_core_positions, {name = "lazarus_space:mucus"})
+		end
 	end
 
 	-- =================================================================
@@ -2388,6 +2370,10 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		local SPINE_SEED = 61483
 		local spine_count = 0
 		local MAX_SPINES_PER_CHUNK = 2
+
+		local spine_bone_positions = {}
+		local spine_cartilage_positions = {}
+		local spine_fatty_nerve_positions = {}
 
 		-- Biome-specific placement rates
 		local spine_chances = {
@@ -2489,9 +2475,9 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 							local existing = minetest.get_node(bpos)
 							if existing.name == "air" or h <= 0 then
 								if is_cartilage_disc then
-									minetest.set_node(bpos, {name = "lazarus_space:cartilage"})
+									spine_cartilage_positions[#spine_cartilage_positions + 1] = bpos
 								else
-									minetest.set_node(bpos, {name = "lazarus_space:bone"})
+									spine_bone_positions[#spine_bone_positions + 1] = bpos
 								end
 							end
 
@@ -2520,7 +2506,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 								local bpos = {x = bx, y = by, z = bz}
 								local existing = minetest.get_node(bpos)
 								if existing.name == "air" then
-									minetest.set_node(bpos, {name = "lazarus_space:fatty_nerve"})
+									spine_fatty_nerve_positions[#spine_fatty_nerve_positions + 1] = bpos
 								end
 							end
 
@@ -2532,7 +2518,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 								local rpos = {x = tip_x, y = tip_y - dy, z = tip_z}
 								local existing = minetest.get_node(rpos)
 								if existing.name == "air" then
-									minetest.set_node(rpos, {name = "lazarus_space:fatty_nerve"})
+									spine_fatty_nerve_positions[#spine_fatty_nerve_positions + 1] = rpos
 								end
 							end
 						end
@@ -2553,7 +2539,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 							local rpos = {x = rx, y = surface_y + 1, z = rz}
 							local existing = minetest.get_node(rpos)
 							if existing.name == "air" then
-								minetest.set_node(rpos, {name = "lazarus_space:bone"})
+								spine_bone_positions[#spine_bone_positions + 1] = rpos
 							end
 						end
 					end
@@ -2571,7 +2557,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						local cpos = {x = cx, y = cy, z = cz}
 						local existing = minetest.get_node(cpos)
 						if existing.name == "air" then
-							minetest.set_node(cpos, {name = "lazarus_space:fatty_nerve"})
+							spine_fatty_nerve_positions[#spine_fatty_nerve_positions + 1] = cpos
 						end
 					end
 				end
@@ -2580,6 +2566,17 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 				::continue_spine::
 			end
 			if spine_count >= MAX_SPINES_PER_CHUNK then break end
+		end
+
+		-- Flush batched spine tree nodes
+		if #spine_bone_positions > 0 then
+			minetest.bulk_set_node(spine_bone_positions, {name = "lazarus_space:bone"})
+		end
+		if #spine_cartilage_positions > 0 then
+			minetest.bulk_set_node(spine_cartilage_positions, {name = "lazarus_space:cartilage"})
+		end
+		if #spine_fatty_nerve_positions > 0 then
+			minetest.bulk_set_node(spine_fatty_nerve_positions, {name = "lazarus_space:fatty_nerve"})
 		end
 	end
 end)

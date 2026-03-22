@@ -352,7 +352,7 @@ minetest.register_node("lazarus_space:plasma_source", {
 	liquid_viscosity = 4,
 	liquid_range = 8,
 	post_effect_color = {a = 245, r = 60, g = 0, b = 0},
-	groups = {liquid = 3, water = 3},
+	groups = {liquid = 3},
 })
 
 minetest.register_node("lazarus_space:plasma_flowing", {
@@ -386,7 +386,7 @@ minetest.register_node("lazarus_space:plasma_flowing", {
 	liquid_viscosity = 4,
 	liquid_range = 8,
 	post_effect_color = {a = 245, r = 60, g = 0, b = 0},
-	groups = {liquid = 3, water = 3, not_in_creative_inventory = 1},
+	groups = {liquid = 3, not_in_creative_inventory = 1},
 })
 
 -- Bile Liquid
@@ -702,7 +702,9 @@ minetest.register_abm({
 		end
 
 		-- Count vine length above (don't grow forever)
-		local max_length = 4 + math.floor(math.random() * 5)  -- 4-8 blocks max
+		-- Deterministic max_length based on position so it doesn't change each tick
+		local h = (pos.x * 374761393 + pos.z * 83492791) % 2147483647
+		local max_length = 4 + (h % 5)  -- 4-8 blocks max
 		local check_pos = {x = pos.x, y = pos.y, z = pos.z}
 		local length = 0
 		while true do

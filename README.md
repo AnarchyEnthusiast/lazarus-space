@@ -105,9 +105,9 @@ A massive organic interior dimension spanning y=26927–29200, accessed through 
 ### Critical Bugs
 
 - [ ] **bio_mapgen.lua:1010-1013** — Dead if/else branch: both paths assign `c.stone`, hollow asteroid shells have no material variety. One branch should use a different material.
-- [ ] **bio_nodes.lua** — Plasma source registered with `groups = {water = 3}`, bucket mods treat it as water. Remove water group, keep only `liquid = 3`.
-- [ ] **crafting3d.lua** — Test recipe (dirt ring → mese) left in production code. Remove it.
-- [ ] **crafting3d.lua** — API named `register_6x6_craft` / `find_6x6_craft` but grid is actually 5x5. Rename to match.
+- [x] **bio_nodes.lua** — Plasma source registered with `groups = {water = 3}`, bucket mods treat it as water. Removed water group.
+- [x] **crafting3d.lua** — Test recipe (dirt ring → mese) left in production code. Removed.
+- [x] **crafting3d.lua** — API named `register_6x6_craft` / `find_6x6_craft` but grid is actually 5x5. Renamed to 5x5.
 
 ### Critical Performance
 
@@ -121,7 +121,7 @@ A massive organic interior dimension spanning y=26927–29200, accessed through 
 
 - [ ] **jumpdrive.lua:1024-1028** — After-jump network invalidation averages source+destination positions, producing a midpoint in neither network. Invalidate both centers independently.
 - [ ] **nodes.lua** — Base `disrupted_space` may lack `use_texture_alpha = "blend"` while all 20 variants have it.
-- [ ] **crafting3d.lua** — Functions named 6x6 but implement 5x5 grid. Rename for clarity.
+- [x] **crafting3d.lua** — Functions named 6x6 but implement 5x5 grid. Renamed to 5x5.
 - [ ] **portal_guide.lua** — Page 1 (setup) and page 2 (overview) appear reversed. Overview should come first.
 - [ ] **bio_nodes.lua** — Cave vine ABM recalculates random `max_length` every tick instead of storing in metadata.
 

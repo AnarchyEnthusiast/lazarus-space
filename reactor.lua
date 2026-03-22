@@ -346,16 +346,12 @@ end
 
 --- Find the pole corrector near a given position.
 local function find_pole_corrector(pos)
-	local range = 10 -- large enough for tier 3 (17x17)
-	for dx = -range, range do
-		for dy = -range, range do
-			for dz = -range, range do
-				local p = {x=pos.x+dx, y=pos.y+dy, z=pos.z+dz}
-				if minetest.get_node(p).name == PC then
-					return p
-				end
-			end
-		end
+	local range = 10
+	local min_pos = {x = pos.x - range, y = pos.y - range, z = pos.z - range}
+	local max_pos = {x = pos.x + range, y = pos.y + range, z = pos.z + range}
+	local found = minetest.find_nodes_in_area(min_pos, max_pos, {PC})
+	if found and #found > 0 then
+		return found[1]
 	end
 	return nil
 end

@@ -112,6 +112,7 @@ minetest.register_node("lazarus_space:disrupted_space", {
 		},
 	}},
 	paramtype = "light",
+	use_texture_alpha = "blend",
 	sunlight_propagates = false,
 	walkable = true,
 	diggable = false,

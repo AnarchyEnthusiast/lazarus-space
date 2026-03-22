@@ -4,6 +4,31 @@
 -- power info, field status, and player inventory. The disrupter
 -- only knows about the stasis field — no portal awareness.
 
+-- ============================================================
+-- SHARED FORMSPEC HELPERS
+-- ============================================================
+
+function lazarus_space.styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, text)
+	text = text or "#ffffff"
+	bg_hover = bg_hover or bg
+	bg_press = bg_press or bg
+	fs = fs .. "style[" .. name .. ";bgcolor=" .. bg
+		.. ";bgcolor_hovered=" .. bg_hover
+		.. ";bgcolor_pressed=" .. bg_press
+		.. ";textcolor=" .. text .. "]"
+	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h
+		.. ";" .. name .. ";" .. label .. "]"
+	return fs
+end
+
+function lazarus_space.page_header(fs, title)
+	fs = fs .. "box[0.3,0.3;8.4,0.6;#1a1a2e]"
+	fs = fs .. "style_type[label;font_size=*1.2]"
+	fs = fs .. "label[0.6,0.65;" .. minetest.formspec_escape(title) .. "]"
+	fs = fs .. "style_type[label;font_size=*1]"
+	return fs
+end
+
 function lazarus_space.build_formspec(pos)
 	local meta = minetest.get_meta(pos)
 	local state = meta:get_string("state")

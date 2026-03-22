@@ -20,6 +20,13 @@ function lazarus_space.is_portal(name)
 	return name:find("^lazarus_space:portal_") ~= nil
 end
 
+--- Fast deterministic position hash for pseudorandom decisions.
+function lazarus_space.pos_hash(x, y, z)
+	local h = (x * 374761393 + y * 668265263 + z * 83492791) % 2147483647
+	h = ((h * 1103515245) + 12345) % 2147483647
+	return ((h * 1103515245) + 12345) % 2147483647
+end
+
 local modpath = minetest.get_modpath("lazarus_space")
 
 dofile(modpath .. "/formspec.lua")

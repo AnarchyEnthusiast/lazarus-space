@@ -187,8 +187,8 @@ local function build_jumpdrive_formspec(pos, tab_override)
 
 		-- Radius controls
 		fs = fs .. "field[0.4,3.3;3.4,0.8;radius_x;Radius X (1-" .. MAX_RADIUS .. ");" .. rx .. "]"
-		fs = fs .. "field[4.2,3.3;3.4,0.8;radius_y;Radius Y;" .. ry .. "]"
-		fs = fs .. "field[8.0,3.3;3.4,0.8;radius_z;Radius Z;" .. rz .. "]"
+		fs = fs .. "field[4.2,3.3;3.4,0.8;radius_y;Radius Y (1-" .. MAX_RADIUS .. ");" .. ry .. "]"
+		fs = fs .. "field[8.0,3.3;3.4,0.8;radius_z;Radius Z (1-" .. MAX_RADIUS .. ");" .. rz .. "]"
 
 		-- Action buttons row 1: Jump, Show, Save, Blanket toggle
 		local blanket_on = meta:get_int("blanket_mode") == 1
@@ -595,6 +595,24 @@ local function execute_blanket_jump(pos, player)
 		return false
 	end
 
+	-- Check protection at source and destination
+	local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
+	local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
+	local dst1 = {x = target.x - rx, y = target.y - ry, z = target.z - rz}
+	local dst2 = {x = target.x + rx, y = target.y + ry, z = target.z + rz}
+
+	-- Check corners of source and destination areas for protection
+	for _, corner in ipairs({src1, src2, dst1, dst2,
+		{x = src1.x, y = src1.y, z = src2.z}, {x = src2.x, y = src2.y, z = src1.z},
+		{x = dst1.x, y = dst1.y, z = dst2.z}, {x = dst2.x, y = dst2.y, z = dst1.z}}) do
+		if minetest.is_protected(corner, pname) then
+			minetest.chat_send_player(pname, minetest.colorize("#ff3333",
+				"Blanket jump blocked — area is protected at ("
+				.. corner.x .. "," .. corner.y .. "," .. corner.z .. ")"))
+			return false
+		end
+	end
+
 	-- Power check
 	local power_needed
 	if jumpdrive and jumpdrive.calculate_power then
@@ -608,12 +626,6 @@ local function execute_blanket_jump(pos, player)
 			"Not enough power: " .. stored .. "/" .. power_needed .. " EU"))
 		return false
 	end
-
-	-- Source and destination areas
-	local src1 = {x = pos.x - rx, y = pos.y - ry, z = pos.z - rz}
-	local src2 = {x = pos.x + rx, y = pos.y + ry, z = pos.z + rz}
-	local dst1 = vector.add(src1, offset)
-	local dst2 = vector.add(src2, offset)
 
 	-- Check for source/destination overlap — if overlapping, we need a two-pass approach
 	local areas_overlap = not (src2.x < dst1.x or dst2.x < src1.x or
@@ -1019,17 +1031,13 @@ technic.register_machine("HV", "lazarus_space:jumpdrive", technic.receiver)
 -- Force technic network rebuild after any jump that might include our node
 if jumpdrive and jumpdrive.register_after_jump then
 	jumpdrive.register_after_jump(function(from_area, to_area)
-		-- Invalidate networks at both source and destination areas
 		if technic.pos2network and technic.remove_network then
-			local from_center = {
-				x = math.floor((from_area.x + to_area.x) / 2),
-				y = math.floor((from_area.y + to_area.y) / 2),
-				z = math.floor((from_area.z + to_area.z) / 2),
-			}
-			local net_id = technic.pos2network(from_center)
-			if net_id then
-				technic.remove_network(net_id)
-			end
+			-- Invalidate source network
+			local sn = technic.pos2network(from_area)
+			if sn then technic.remove_network(sn) end
+			-- Invalidate destination network
+			local dn = technic.pos2network(to_area)
+			if dn then technic.remove_network(dn) end
 		end
 	end)
 end

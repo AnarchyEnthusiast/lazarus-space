@@ -98,29 +98,34 @@ local function explode(center, radius)
 		max_hear_distance = radius * 10,
 	}, true)
 
-	-- Destroy all nodes in sphere (except air and ignore).
+	-- Destroy all nodes in sphere (except air and ignore) via VoxelManip.
 	local count = 0
+	local min_pos = {x = center.x - radius, y = center.y - radius, z = center.z - radius}
+	local max_pos = {x = center.x + radius, y = center.y + radius, z = center.z + radius}
+	local vm = minetest.get_voxel_manip()
+	local emin, emax = vm:read_from_map(min_pos, max_pos)
+	local va = VoxelArea:new({MinEdge = emin, MaxEdge = emax})
+	local data = vm:get_data()
+	local c_air = minetest.get_content_id("air")
+	local c_ignore = minetest.get_content_id("ignore")
+	local r_sq = radius * radius
+
 	for dx = -radius, radius do
 		for dy = -radius, radius do
 			for dz = -radius, radius do
-				local dist = math.sqrt(dx * dx + dy * dy
-					+ dz * dz)
-				if dist <= radius then
-					local p = {
-						x = center.x + dx,
-						y = center.y + dy,
-						z = center.z + dz,
-					}
-					local node = minetest.get_node(p)
-					if node.name ~= "air"
-							and node.name ~= "ignore" then
-						minetest.set_node(p, {name = "air"})
+				if dx * dx + dy * dy + dz * dz <= r_sq then
+					local vi = va:index(center.x + dx, center.y + dy, center.z + dz)
+					if data[vi] ~= c_air and data[vi] ~= c_ignore then
+						data[vi] = c_air
 						count = count + 1
 					end
 				end
 			end
 		end
 	end
+
+	vm:set_data(data)
+	vm:write_to_map(true)
 
 	-- Damage all entities in blast radius.
 	local objects = minetest.get_objects_inside_radius(
@@ -189,6 +194,19 @@ function lazarus_space.deploy_field(pos)
 		persist = 0.5,
 	})
 
+	-- VoxelManip for bulk shell placement
+	local shell_min = {x = pos.x - radius - 1, y = pos.y - radius - 1, z = pos.z - radius - 1}
+	local shell_max = {x = pos.x + radius + 1, y = pos.y + radius + 1, z = pos.z + radius + 1}
+	local vm = minetest.get_voxel_manip()
+	local emin, emax = vm:read_from_map(shell_min, shell_max)
+	local va = VoxelArea:new({MinEdge = emin, MaxEdge = emax})
+	local data = vm:get_data()
+
+	local c_ds = {}
+	for i = 1, 20 do
+		c_ds[i] = minetest.get_content_id("lazarus_space:disrupted_space_" .. i)
+	end
+
 	for dx = -radius - 1, radius + 1 do
 		for dy = -radius - 1, radius + 1 do
 			for dz = -radius - 1, radius + 1 do
@@ -201,23 +219,15 @@ function lazarus_space.deploy_field(pos)
 					goto next
 				end
 
-				local p = {
-					x = pos.x + dx,
-					y = pos.y + dy,
-					z = pos.z + dz,
-				}
-				local node = minetest.get_node(p)
-
 				if dist >= r_min then
 					-- Shell: place disrupted space with
 					-- noise-based opacity variant.
-					-- 25% variants 1-9 (faintly visible),
-					-- 75% variants 10-20 (near-invisible).
-					-- Shell is felt more than seen.
+					local p = {
+						x = pos.x + dx,
+						y = pos.y + dy,
+						z = pos.z + dz,
+					}
 					local nval = (noise:get_3d(p) + 1) / 2
-					-- Clamp to [0, 1] — Perlin noise can
-					-- exceed [-1, 1] producing out-of-range
-					-- variant indices.
 					if nval < 0 then nval = 0 end
 					if nval > 1 then nval = 1 end
 					local variant
@@ -233,13 +243,16 @@ function lazarus_space.deploy_field(pos)
 							variant = 20
 						end
 					end
-					minetest.set_node(p, {
-						name = "lazarus_space:disrupted_space_"
-							.. variant,
-					})
+					local vi = va:index(pos.x + dx, pos.y + dy, pos.z + dz)
+					data[vi] = c_ds[variant]
 					shell_count = shell_count + 1
 				else
 					-- Interior: check for reactor cores.
+					local node = minetest.get_node({
+						x = pos.x + dx,
+						y = pos.y + dy,
+						z = pos.z + dz,
+					})
 					for _, core_name in ipairs(REACTOR_CORES) do
 						if node.name == core_name then
 							reactor_found = true
@@ -251,6 +264,9 @@ function lazarus_space.deploy_field(pos)
 			end
 		end
 	end
+
+	vm:set_data(data)
+	vm:write_to_map(true)
 
 	minetest.log("action",
 		"Lazarus Space: deployed " .. shell_count
@@ -364,6 +380,68 @@ function lazarus_space.deploy_field(pos)
 end
 
 -- ============================================================
+-- FIELD CLEANUP HELPER
+-- ============================================================
+
+--- Shared cleanup: remove shell, portal, disrupted space nodes,
+--- and randomly delete 50% of interior solid blocks.
+local function cleanup_field_nodes(pos, radius)
+	local r_min = radius
+	local r_max = radius + 1
+	local stats = {shell = 0, portal = 0, deleted = 0, kept = 0}
+
+	for dx = -radius - 1, radius + 1 do
+		for dy = -radius - 1, radius + 1 do
+			for dz = -radius - 1, radius + 1 do
+				local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+				if dist > r_max then goto next_cleanup end
+				local p = {x = pos.x + dx, y = pos.y + dy, z = pos.z + dz}
+				local current = minetest.get_node(p)
+				if current.name == "air" or current.name == "ignore" then
+					goto next_cleanup
+				end
+
+				if dist >= r_min then
+					-- Shell zone
+					minetest.set_node(p, {name = "air"})
+					stats.shell = stats.shell + 1
+				else
+					-- Interior zone
+					if lazarus_space.is_portal(current.name) then
+						minetest.set_node(p, {name = "air"})
+						stats.portal = stats.portal + 1
+					elseif lazarus_space.is_disrupted_space(current.name) then
+						minetest.set_node(p, {name = "air"})
+						stats.shell = stats.shell + 1
+					elseif math.random() < 0.5 then
+						minetest.set_node(p, {name = "air"})
+						stats.deleted = stats.deleted + 1
+					else
+						stats.kept = stats.kept + 1
+					end
+				end
+				::next_cleanup::
+			end
+		end
+	end
+
+	-- Safety sweep for stragglers
+	for dx = -radius - 1, radius + 1 do
+		for dy = -radius - 1, radius + 1 do
+			for dz = -radius - 1, radius + 1 do
+				local p = {x = pos.x + dx, y = pos.y + dy, z = pos.z + dz}
+				local n = minetest.get_node(p)
+				if lazarus_space.is_disrupted_space(n.name) or lazarus_space.is_portal(n.name) then
+					minetest.set_node(p, {name = "air"})
+				end
+			end
+		end
+	end
+
+	return stats
+end
+
+-- ============================================================
 -- FIELD TEARDOWN
 -- ============================================================
 
@@ -416,109 +494,17 @@ function lazarus_space.teardown_field(pos)
 	minetest.set_node(pos, {name = "air"})
 
 	local radius = field.radius
-	local r_min = radius - 0.5
-	local r_max = radius + 0.5
-	local stats = {
-		shell = 0, portal = 0, deleted = 0,
-		kept = 0,
-	}
 
-	for dx = -radius - 1, radius + 1 do
-		for dy = -radius - 1, radius + 1 do
-			for dz = -radius - 1, radius + 1 do
-				local dist = math.sqrt(dx * dx + dy * dy
-					+ dz * dz)
-				if dist > r_max then goto next_pos end
-
-				local p = {
-					x = pos.x + dx,
-					y = pos.y + dy,
-					z = pos.z + dz,
-				}
-				local current = minetest.get_node(p)
-
-				if dist >= r_min then
-					-- Shell: always replace with air.
-					minetest.set_node(p, {name = "air"})
-					stats.shell = stats.shell + 1
-				else
-					-- Interior block.
-
-					-- Portal: always remove.
-					if lazarus_space.is_portal(
-							current.name) then
-						minetest.set_node(p, {name = "air"})
-						stats.portal = stats.portal + 1
-						goto next_pos
-					end
-
-					-- Disrupted space: always remove.
-					if lazarus_space.is_disrupted_space(
-							current.name) then
-						minetest.set_node(p, {name = "air"})
-						goto next_pos
-					end
-
-					-- Skip air.
-					if current.name == "air" then
-						goto next_pos
-					end
-
-					-- 50% random deletion of all
-					-- remaining solid blocks.
-					if math.random() < 0.5 then
-						minetest.set_node(p,
-							{name = "air"})
-						stats.deleted =
-							stats.deleted + 1
-					else
-						stats.kept = stats.kept + 1
-					end
-				end
-
-				::next_pos::
-			end
-		end
-	end
-
-	minetest.log("action",
-		"Lazarus Space: teardown —"
-		.. " shell=" .. stats.shell
-		.. " portal=" .. stats.portal
-		.. " deleted=" .. stats.deleted
-		.. " kept=" .. stats.kept)
-
-	-- Safety sweep: force-remove any remaining disrupted_space
-	-- variants in the field volume. Catches edge cases where
-	-- timing or chunk loading leaves stragglers.
-	for dx = -radius - 1, radius + 1 do
-		for dy = -radius - 1, radius + 1 do
-			for dz = -radius - 1, radius + 1 do
-				local dist = math.sqrt(dx * dx + dy * dy
-					+ dz * dz)
-				if dist <= r_max then
-					local p = {
-						x = pos.x + dx,
-						y = pos.y + dy,
-						z = pos.z + dz,
-					}
-					local node = minetest.get_node(p)
-					if lazarus_space.is_disrupted_space(
-							node.name) then
-						minetest.set_node(p,
-							{name = "air"})
-					end
-				end
-			end
-		end
-	end
+	-- Clean up field nodes
+	local stats = cleanup_field_nodes(pos, radius)
 
 	-- Unfreeze entities.
 	lazarus_space.unfreeze_entities(pos, radius)
 
 	minetest.log("action",
-		"Lazarus Space: field collapsed at "
-		.. minetest.pos_to_string(pos))
+		"Lazarus Space: teardown complete — "
+		.. stats.shell .. " shell, " .. stats.portal .. " portal, "
+		.. stats.deleted .. " terrain deleted, " .. stats.kept .. " kept")
 end
 
 -- ============================================================
@@ -780,50 +766,22 @@ minetest.register_abm({
 -- Uses pos_belongs_to_field which checks radius + 1 to cover
 -- the shell (which extends up to radius + 0.5 from center).
 -- Build orphan cleanup list with all 20 disrupted space variants.
-local orphan_nodenames = {
-	"lazarus_space:disrupted_space",
-	"lazarus_space:lazarus_portal",
-	"lazarus_space:decaying_uranium",
-	"lazarus_space:warp_glow_1",
-	"lazarus_space:warp_glow_2",
-	"lazarus_space:warp_glow_3",
-	"lazarus_space:warp_glow_4",
-}
+local orphan_nodenames = {}
+for name, _ in pairs(lazarus_space.PORTAL_LOOKUP) do
+	orphan_nodenames[#orphan_nodenames + 1] = name
+end
+-- Also include disrupted space variants
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:disrupted_space"
 for i = 1, 20 do
-	orphan_nodenames[#orphan_nodenames + 1] =
-		"lazarus_space:disrupted_space_" .. i
+	orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:disrupted_space_" .. i
 end
--- Portal surface coating variants (all 63 face combinations).
-local orphan_face_names = {
-	"ceiling", "floor", "wall_e", "wall_n", "wall_s", "wall_w",
-}
-local function orphan_face_subsets(k)
-	local results = {}
-	local function recurse(start, current)
-		if #current == k then
-			local copy = {}
-			for i, v in ipairs(current) do copy[i] = v end
-			results[#results + 1] = copy
-			return
-		end
-		for i = start, #orphan_face_names do
-			current[#current + 1] = orphan_face_names[i]
-			recurse(i + 1, current)
-			current[#current] = nil
-		end
-	end
-	recurse(1, {})
-	return results
-end
-for fc = 1, 6 do
-	for _, fs in ipairs(orphan_face_subsets(fc)) do
-		local name = "lazarus_space:portal_" .. fc .. "f"
-		for _, f in ipairs(fs) do
-			name = name .. "_" .. f
-		end
-		orphan_nodenames[#orphan_nodenames + 1] = name
-	end
-end
+-- Other field-generated nodes
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:lazarus_portal"
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:decaying_uranium"
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:warp_glow_1"
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:warp_glow_2"
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:warp_glow_3"
+orphan_nodenames[#orphan_nodenames + 1] = "lazarus_space:warp_glow_4"
 
 minetest.register_abm({
 	label = "Lazarus Space orphaned node cleanup",
@@ -851,18 +809,24 @@ minetest.register_globalstep(function(dtime)
 	-- any unfrozen entities found inside.
 	local to_collapse = {}
 	local players = minetest.get_connected_players()
+	local MAX_OBSERVATION_DISTANCE = 200
+
 	for hash, field in pairs(lazarus_space.active_fields) do
 		-- Check all connected players against the sphere.
 		-- Catches every way a player can leave: teleport,
 		-- death, disconnect, admin commands, other mods.
 		local has_player = false
 		for _, player in ipairs(players) do
-			local d = vector.distance(
-				player:get_pos(), field.pos)
-			if d <= field.radius then
+			local ppos = player:get_pos()
+			local dist = vector.distance(ppos, field.pos)
+			if dist > MAX_OBSERVATION_DISTANCE then
+				goto next_player
+			end
+			if dist <= field.radius then
 				has_player = true
 				break
 			end
+			::next_player::
 		end
 
 		-- Freeze any unfrozen entities inside field.
@@ -906,14 +870,14 @@ end)
 -- Each ring is a great circle around the sphere center.
 -- Alternating CW/CCW rotation, black/white particles.
 
-local RING_COUNT = 32
-local PARTICLES_PER_RING = 150
-local RING_SPAWN_INTERVAL = 0.1 -- seconds between spawns
+local RING_COUNT = 8
+local RING_SPAWN_INTERVAL = 0.5 -- seconds between spawner creation
 local RING_ROTATION_PERIOD = 3.5 -- seconds per full rotation
 local RING_FADE_DURATION = 1.5 -- seconds to fade out
-local PARTICLE_LIFETIME = 0.25
+local PARTICLE_LIFETIME = 0.5
 local PARTICLE_SIZE_MIN = 0.6
 local PARTICLE_SIZE_MAX = 0.8
+local PARTICLES_PER_SPAWNER = 60
 
 local ring_timer = 0
 minetest.register_globalstep(function(dtime)
@@ -951,60 +915,33 @@ minetest.register_globalstep(function(dtime)
 		local center = dev.pos
 		local radius = dev.radius
 
-		for ring = 0, RING_COUNT - 1 do
-			-- Tilt angle: evenly distributed across 180 degrees.
-			local tilt = ring * math.pi / RING_COUNT
+		local base_angle = elapsed * (2 * math.pi / RING_ROTATION_PERIOD)
 
-			-- Rotation direction: alternate CW/CCW.
-			local direction = (ring % 2 == 0) and 1 or -1
+		for ring_i = 0, RING_COUNT - 1 do
+			local ring_frac = ring_i / RING_COUNT
+			local ring_angle = base_angle + ring_frac * math.pi * 2
+			local ring_radius = radius * (0.85 + ring_frac * 0.15)
+			local ring_y = center.y + radius * math.sin(ring_frac * math.pi * 2) * 0.3
 
-			-- Current rotation offset.
-			local rot_offset = direction * elapsed
-				* (2 * math.pi / RING_ROTATION_PERIOD)
+			local cx = center.x + math.cos(ring_angle) * ring_radius * 0.3
+			local cz = center.z + math.sin(ring_angle) * ring_radius * 0.3
 
-			for p = 0, PARTICLES_PER_RING - 1 do
-				-- Angle along the ring.
-				local phi = rot_offset
-					+ p * (2 * math.pi / PARTICLES_PER_RING)
-
-				-- Position on tilted great circle.
-				-- Tilt around X axis.
-				local x = radius * math.cos(phi)
-				local y = -radius * math.sin(phi)
-					* math.sin(tilt)
-				local z = radius * math.sin(phi)
-					* math.cos(tilt)
-
-				-- Alternate black/white.
-				local tex, particle_glow
-				if p % 2 == 0 then
-					tex = "lazarus_space_particle_black.png"
-					particle_glow = 0
-				else
-					tex = "lazarus_space_particle_white.png"
-					particle_glow = 8
-				end
-
-				local size = PARTICLE_SIZE_MIN
-					+ math.random()
-					* (PARTICLE_SIZE_MAX - PARTICLE_SIZE_MIN)
-
-				minetest.add_particle({
-					pos = {
-						x = center.x + x,
-						y = center.y + y,
-						z = center.z + z,
-					},
-					velocity = {x = 0, y = 0, z = 0},
-					acceleration = {x = 0, y = 0, z = 0},
-					expirationtime = PARTICLE_LIFETIME,
-					size = size,
-					texture = tex
-						.. "^[opacity:" .. opacity,
-					glow = particle_glow,
-					collisiondetection = false,
-				})
-			end
+			minetest.add_particlespawner({
+				amount = PARTICLES_PER_SPAWNER,
+				time = RING_SPAWN_INTERVAL,
+				minpos = {x = cx - ring_radius * 0.5, y = ring_y - 0.5, z = cz - ring_radius * 0.5},
+				maxpos = {x = cx + ring_radius * 0.5, y = ring_y + 0.5, z = cz + ring_radius * 0.5},
+				minvel = {x = -0.2, y = -0.1, z = -0.2},
+				maxvel = {x = 0.2, y = 0.1, z = 0.2},
+				minacc = {x = 0, y = 0, z = 0},
+				maxacc = {x = 0, y = 0, z = 0},
+				minexptime = PARTICLE_LIFETIME * 0.5,
+				maxexptime = PARTICLE_LIFETIME,
+				minsize = PARTICLE_SIZE_MIN,
+				maxsize = PARTICLE_SIZE_MAX,
+				texture = "lazarus_space_particle_white.png",
+				glow = 14,
+			})
 		end
 
 		::next_dev::
@@ -1057,101 +994,13 @@ local function cold_collapse(pos, radius)
 	-- Destroy the continuum disrupter device.
 	minetest.set_node(pos, {name = "air"})
 
-	local r_min = radius - 0.5
-	local r_max = radius + 0.5
-	local stats = {
-		shell = 0, portal = 0, deleted = 0, kept = 0,
-	}
-
-	for dx = -radius - 1, radius + 1 do
-		for dy = -radius - 1, radius + 1 do
-			for dz = -radius - 1, radius + 1 do
-				local dist = math.sqrt(
-					dx * dx + dy * dy + dz * dz)
-				if dist > r_max then goto next_cold end
-
-				local p = {
-					x = pos.x + dx,
-					y = pos.y + dy,
-					z = pos.z + dz,
-				}
-				local current = minetest.get_node(p)
-
-				if dist >= r_min then
-					-- Shell: always remove.
-					if current.name ~= "air"
-							and current.name ~= "ignore" then
-						minetest.set_node(p, {name = "air"})
-						stats.shell = stats.shell + 1
-					end
-				else
-					-- Portal: always remove.
-					if lazarus_space.is_portal(
-							current.name) then
-						minetest.set_node(p,
-							{name = "air"})
-						stats.portal = stats.portal + 1
-						goto next_cold
-					end
-
-					-- Disrupted space: always remove.
-					if lazarus_space.is_disrupted_space(
-							current.name) then
-						minetest.set_node(p,
-							{name = "air"})
-						goto next_cold
-					end
-
-					-- Skip air.
-					if current.name == "air" then
-						goto next_cold
-					end
-
-					-- 50% random deletion.
-					if math.random() < 0.5 then
-						minetest.set_node(p,
-							{name = "air"})
-						stats.deleted =
-							stats.deleted + 1
-					else
-						stats.kept = stats.kept + 1
-					end
-				end
-
-				::next_cold::
-			end
-		end
-	end
-
-	-- Safety sweep for straggler disrupted_space nodes.
-	for dx = -radius - 1, radius + 1 do
-		for dy = -radius - 1, radius + 1 do
-			for dz = -radius - 1, radius + 1 do
-				local dist = math.sqrt(
-					dx * dx + dy * dy + dz * dz)
-				if dist <= r_max then
-					local p = {
-						x = pos.x + dx,
-						y = pos.y + dy,
-						z = pos.z + dz,
-					}
-					local node = minetest.get_node(p)
-					if lazarus_space.is_disrupted_space(
-							node.name) then
-						minetest.set_node(p,
-							{name = "air"})
-					end
-				end
-			end
-		end
-	end
+	-- Clean up field nodes
+	local stats = cleanup_field_nodes(pos, radius)
 
 	minetest.log("action",
-		"Lazarus Space: cold collapse complete —"
-		.. " shell=" .. stats.shell
-		.. " portal=" .. stats.portal
-		.. " deleted=" .. stats.deleted
-		.. " kept=" .. stats.kept)
+		"Lazarus Space: cold collapse complete — "
+		.. stats.shell .. " shell, " .. stats.portal .. " portal, "
+		.. stats.deleted .. " terrain deleted, " .. stats.kept .. " kept")
 end
 
 --- Recover any fields that were active when the server stopped.

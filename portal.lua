@@ -2,8 +2,8 @@
 
 local PORTAL_GROWTH_INTERVAL = 0.405 -- seconds between growth ticks
 local PORTAL_TELEPORT_RANGE = 10000
-local PORTAL_Y_MIN = 85
-local PORTAL_Y_MAX = 120
+local PORTAL_Y_MIN = 27775
+local PORTAL_Y_MAX = 27900
 local PORTAL_Y_SCAN = 5 -- vertical scan range for terrain following
 local WARP_CHARGE_TIME = 3.0 -- seconds for warp device glow charge
 local WARP_GLOW_STAGES = 4 -- number of glow brightness levels
@@ -350,12 +350,10 @@ minetest.register_globalstep(function(dtime)
 				field.portal_activate_timer + dtime
 			if field.portal_activate_timer
 					>= PORTAL_ACTIVATE_DELAY then
-				local elapsed = minetest.get_us_time()
-					- field.portal_activate_start
+				local elapsed = field.portal_activate_timer
 				-- Delay elapsed. Portal is active.
 				field.state = "portal_ready"
 				field.portal_activate_timer = nil
-				field.portal_activate_start = nil
 				local meta = minetest.get_meta(
 					field.pos)
 				meta:set_string("state",
@@ -398,7 +396,7 @@ minetest.register_globalstep(function(dtime)
 					"Lazarus Space: portal active"
 					.. " after "
 					.. string.format("%.1f",
-						elapsed / 1000000)
+						elapsed)
 					.. "s delay")
 			end
 		end
@@ -450,8 +448,6 @@ minetest.register_globalstep(function(dtime)
 			field.portal_frontier = nil
 			field.portal_visited = nil
 			field.portal_activate_timer = 0
-			field.portal_activate_start =
-				minetest.get_us_time()
 			local meta = minetest.get_meta(
 				field.pos)
 			meta:set_string("state",
@@ -566,27 +562,41 @@ minetest.register_globalstep(function(dtime)
 
 		if not field_pos then goto next_player end
 
-		-- Teleport to random surface position.
-		local dest_x = math.random(-PORTAL_TELEPORT_RANGE,
-			PORTAL_TELEPORT_RANGE)
-		local dest_z = math.random(-PORTAL_TELEPORT_RANGE,
-			PORTAL_TELEPORT_RANGE)
-		local dest_y = PORTAL_Y_MAX
+		-- Teleport to random surface position in Lazarus Space.
+		local MAX_ATTEMPTS = 10
+		local placed = false
 
-		-- Scan downward for solid surface.
-		for y = PORTAL_Y_MAX, PORTAL_Y_MIN, -1 do
-			local check = {x = dest_x, y = y, z = dest_z}
-			local n = minetest.get_node(check)
-			local def = minetest.registered_nodes[n.name]
-			if def and def.walkable then
-				dest_y = y + 1
+		for attempt = 1, MAX_ATTEMPTS do
+			local dest_x = math.random(-PORTAL_TELEPORT_RANGE, PORTAL_TELEPORT_RANGE)
+			local dest_z = math.random(-PORTAL_TELEPORT_RANGE, PORTAL_TELEPORT_RANGE)
+			local dest_y = PORTAL_Y_MAX
+
+			-- Scan downward for solid surface
+			for y = PORTAL_Y_MAX, PORTAL_Y_MIN, -1 do
+				local check = {x = dest_x, y = y, z = dest_z}
+				local n = minetest.get_node(check)
+				local def = minetest.registered_nodes[n.name]
+				if def and def.walkable then
+					dest_y = y + 1
+					break
+				end
+			end
+			dest_y = math.max(PORTAL_Y_MIN, math.min(PORTAL_Y_MAX, dest_y))
+
+			-- Safety check: ensure 2 blocks of air above destination
+			local above1 = minetest.get_node({x = dest_x, y = dest_y, z = dest_z})
+			local above2 = minetest.get_node({x = dest_x, y = dest_y + 1, z = dest_z})
+			if above1.name == "air" and above2.name == "air" then
+				player:set_pos({x = dest_x, y = dest_y, z = dest_z})
+				placed = true
 				break
 			end
 		end
-		dest_y = math.max(PORTAL_Y_MIN,
-			math.min(PORTAL_Y_MAX, dest_y))
 
-		player:set_pos({x = dest_x, y = dest_y, z = dest_z})
+		-- Fallback: place at last attempted position if no safe spot found
+		if not placed then
+			player:set_pos({x = 0, y = PORTAL_Y_MIN + 5, z = 0})
+		end
 
 		minetest.log("action",
 			"Lazarus Space: teleported "

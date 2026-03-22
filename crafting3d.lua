@@ -14,7 +14,7 @@ local open_formspecs = {}  -- [player_name] = pos_string
 
 local recipes_5x5 = {}
 
-lazarus_space.register_6x6_craft = function(def)
+lazarus_space.register_5x5_craft = function(def)
 	recipes_5x5[#recipes_5x5 + 1] = {
 		output = def.output,
 		recipe = def.recipe,  -- flat table of 25 strings (5 rows × 5 cols)
@@ -40,7 +40,7 @@ local function item_matches(pattern, item_name)
 	return pattern == item_name
 end
 
-lazarus_space.find_6x6_craft = function(grid)
+lazarus_space.find_5x5_craft = function(grid)
 	for _, recipe in ipairs(recipes_5x5) do
 		local match = true
 		for i = 1, 25 do
@@ -125,7 +125,7 @@ local function update_craft(pos)
 	end
 
 	-- Try 5×5 custom recipes first (requires EU)
-	local result = lazarus_space.find_6x6_craft(grid)
+	local result = lazarus_space.find_5x5_craft(grid)
 	if result then
 		local stored = meta:get_int("stored_energy")
 		if stored >= CRAFT_COST then
@@ -150,7 +150,7 @@ local function update_craft(pos)
 	-- Refresh formspec ONLY for players who have it open
 	local pos_str = minetest.pos_to_string(pos)
 	local fs = build_crafting_formspec(pos)
-	local formname = "lazarus_space:crafting6x6_" .. pos_str
+	local formname = "lazarus_space:crafting5x5_" .. pos_str
 	for pname, open_pos in pairs(open_formspecs) do
 		if open_pos == pos_str then
 			local player = minetest.get_player_by_name(pname)
@@ -255,7 +255,7 @@ minetest.register_node("lazarus_space:crafting_station_3d", {
 		local pname = clicker:get_player_name()
 		open_formspecs[pname] = minetest.pos_to_string(pos)
 		minetest.show_formspec(pname,
-			"lazarus_space:crafting6x6_" .. minetest.pos_to_string(pos), fs)
+			"lazarus_space:crafting5x5_" .. minetest.pos_to_string(pos), fs)
 	end,
 
 	on_metadata_inventory_move = function(pos) update_craft(pos) end,
@@ -342,7 +342,7 @@ technic.register_machine("HV", "lazarus_space:crafting_station_3d", technic.rece
 -- ============================================================
 
 minetest.register_on_player_receive_fields(function(player, formname, fields)
-	local pos_str = formname:match("^lazarus_space:crafting6x6_(.+)$")
+	local pos_str = formname:match("^lazarus_space:crafting5x5_(.+)$")
 	if not pos_str then return end
 	if fields.quit then
 		open_formspecs[player:get_player_name()] = nil
@@ -371,7 +371,7 @@ minetest.register_craft({
 -- ============================================================
 
 -- Diamond cross: 2×2 diamonds in center → diamond block
-lazarus_space.register_6x6_craft({
+lazarus_space.register_5x5_craft({
 	output = "default:diamondblock",
 	recipe = {
 		-- Row 1
@@ -388,7 +388,7 @@ lazarus_space.register_6x6_craft({
 })
 
 -- Steel frame: steel ingots forming outer ring of 3×3 area → 2 stainless steel blocks
-lazarus_space.register_6x6_craft({
+lazarus_space.register_5x5_craft({
 	output = "technic:stainless_steel_block 2",
 	recipe = {
 		-- Row 1
@@ -405,7 +405,7 @@ lazarus_space.register_6x6_craft({
 })
 
 -- Pole field assembly: corrector in center with stainless steel plus pattern → 4 pole field
-lazarus_space.register_6x6_craft({
+lazarus_space.register_5x5_craft({
 	output = "lazarus_space:pole_field 4",
 	recipe = {
 		-- Row 1
@@ -422,23 +422,3 @@ lazarus_space.register_6x6_craft({
 })
 
 -- ============================================================
--- TEST RECIPE (placeholder for development)
--- ============================================================
-
--- 5×5 dirt ring → mese block
--- Ring of dirt around the border of the 5×5 grid
-lazarus_space.register_6x6_craft({
-	output = "default:mese",
-	recipe = {
-		-- Row 1: full top row
-		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
-		-- Row 2: sides only
-		"default:dirt", "", "", "", "default:dirt",
-		-- Row 3: sides only
-		"default:dirt", "", "", "", "default:dirt",
-		-- Row 4: sides only
-		"default:dirt", "", "", "", "default:dirt",
-		-- Row 5: full bottom row
-		"default:dirt", "default:dirt", "default:dirt", "default:dirt", "default:dirt",
-	},
-})

@@ -102,30 +102,7 @@ def generate_static_blocks():
         name, r, g, b, a, special = entry
         filename = f"lazarus_space_{name}.png"
 
-        if special == "lighter_scatter":
-            # flesh_wet: base color with 10% lighter pixels
-            img = Image.new("RGBA", (16, 16))
-            for y in range(16):
-                for x in range(16):
-                    n = random.randint(-5, 5)
-                    if random.random() < 0.10:
-                        # Lighter pixel
-                        img.putpixel((x, y), (
-                            clamp(r + 40 + n),
-                            clamp(g + 20 + n),
-                            clamp(b + 20 + n),
-                            a
-                        ))
-                    else:
-                        img.putpixel((x, y), (
-                            clamp(r + n), clamp(g + n), clamp(b + n), a
-                        ))
-        elif special == "dark_pores":
-            # spongy_bone: cream with 15% darker pores
-            img = make_solid_block_with_spots(
-                (r, g, b), (200, 190, 170), 0.15, a=a
-            )
-        elif isinstance(special, tuple) and len(special) == 3:
+        if isinstance(special, tuple) and len(special) == 3:
             # Tuple of (r,g,b) = scattered spots of that color (25% frequency)
             img = make_solid_block_with_spots(
                 (r, g, b), special, 0.25, a=a

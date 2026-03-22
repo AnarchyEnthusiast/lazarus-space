@@ -11,30 +11,13 @@ local portal_guide_pages = {}
 -- STYLED BUTTON HELPER (local copy)
 -- ============================================================
 
-local function styled_btn(fs, x, y, w, h, name, label, bg, bg_hover, bg_press, text)
-	text = text or "#ffffff"
-	bg_hover = bg_hover or bg
-	bg_press = bg_press or bg
-	fs = fs .. "style[" .. name .. ";bgcolor=" .. bg
-		.. ";bgcolor_hovered=" .. bg_hover
-		.. ";bgcolor_pressed=" .. bg_press
-		.. ";textcolor=" .. text .. "]"
-	fs = fs .. "button[" .. x .. "," .. y .. ";" .. w .. "," .. h
-		.. ";" .. name .. ";" .. label .. "]"
-	return fs
-end
+local styled_btn = lazarus_space.styled_btn
 
 -- ============================================================
 -- PAGE HEADER HELPER
 -- ============================================================
 
-local function page_header(fs, title)
-	fs = fs .. "box[0.3,0.3;8.4,0.6;#1a1a2e]"
-	fs = fs .. "style_type[label;font_size=*1.2]"
-	fs = fs .. "label[0.6,0.65;" .. minetest.formspec_escape(title) .. "]"
-	fs = fs .. "style_type[label;font_size=*1]"
-	return fs
-end
+local page_header = lazarus_space.page_header
 
 -- ============================================================
 -- PAGE 1: OVERVIEW
@@ -214,8 +197,8 @@ local function build_portal_guide_page(page)
 		.. "no_prepend[]"
 
 	-- Dispatch
-	if page == 1 then     fs = build_page_setup(fs)
-	elseif page == 2 then fs = build_page_overview(fs)
+	if page == 1 then     fs = build_page_overview(fs)
+	elseif page == 2 then fs = build_page_setup(fs)
 	elseif page == 3 then fs = build_page_portal(fs)
 	elseif page == 4 then fs = build_page_safety(fs)
 	end
