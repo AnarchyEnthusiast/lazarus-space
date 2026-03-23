@@ -478,8 +478,8 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	local has_death     = (minp.y <= DEATH_SPACE_MAX and maxp.y >= DEATH_SPACE_MIN)
 	local has_caves     = (minp.y <= PLASMA_BARRIER_BOTTOM_MIN and maxp.y >= ORGANIC_CAVE_MIN)
 	local has_plasma   = (minp.y <= PLASMA_MAX and maxp.y >= PLASMA_BARRIER_BOTTOM_MIN)
-	local has_surface   = (maxp.y >= SURFACE_BASE and minp.y <= UPPER_ASTEROID_MIN - 30)
-	local has_upper_ast = (minp.y <= UPPER_ASTEROID_MAX + 25 and maxp.y >= UPPER_ASTEROID_MIN - 30)
+	local has_surface   = (maxp.y >= SURFACE_BASE and minp.y <= UPPER_ASTEROID_MIN)
+	local has_upper_ast = (minp.y <= UPPER_ASTEROID_MAX + 25 and maxp.y >= UPPER_ASTEROID_MIN)
 	local has_stalact   = (minp.y <= STALACTITE_MAX and maxp.y >= STALACTITE_MIN)
 	local has_ceil_cave = (minp.y <= CEILING_CAVE_MAX and maxp.y >= CEILING_CAVE_MIN)
 	local has_ceiling   = (minp.y <= CEILING_MEMBRANE_MAX and maxp.y > UPPER_ASTEROID_MAX + 25)
@@ -1047,10 +1047,10 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						data[vi] = c.air
 					end
 
-				elseif y >= SURFACE_BASE and y < UPPER_ASTEROID_MIN - 30 and has_surface then
+				elseif y >= SURFACE_BASE and y < UPPER_ASTEROID_MIN and has_surface then
 					-- Surface Biome Zone - handled per-column below
 
-				elseif y >= UPPER_ASTEROID_MIN - 30 and y <= UPPER_ASTEROID_MAX + 25 and has_upper_ast then
+				elseif y >= UPPER_ASTEROID_MIN and y <= UPPER_ASTEROID_MAX + 25 and has_upper_ast then
 					-- Upper Asteroid Field
 					local noise_val = nbuf.asteroid_shape[ni3d]
 					local ph = pos_hash(x, y, z)
@@ -1227,16 +1227,11 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 
 						if in_stalactite then
 							-- Already placed by stalactite code above
-						elseif y < UPPER_ASTEROID_MIN then
-							-- Buffer zone: only hollow asteroids generate here (handled above)
-							-- Barren asteroid noise does not extend into buffer
-							if not in_hollow then
-								data[vi] = c.air
-							end
 						else
 						-- Displaced asteroid field edges (noisy boundaries)
 						local ni2d_ast = (z - minp.z) * sidelen + (x - minp.x) + 1
-						local ast_bottom = UPPER_ASTEROID_MIN + (nbuf.asteroid_edge_bottom and nbuf.asteroid_edge_bottom[ni2d_ast] or 0)
+						local ast_edge_disp = nbuf.asteroid_edge_bottom and nbuf.asteroid_edge_bottom[ni2d_ast] or 0
+						local ast_bottom = UPPER_ASTEROID_MIN + math_max(0, ast_edge_disp)
 						local ast_top = UPPER_ASTEROID_MAX + (nbuf.asteroid_edge_top and nbuf.asteroid_edge_top[ni2d_ast] or 0)
 
 						-- Check if outside displaced edge
@@ -1458,7 +1453,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		-- Y-range boundaries for each zone
 		local cave_y_min  = has_caves     and math_max(minp.y + 1, ORGANIC_CAVE_MIN)       or 0
 		local cave_y_max  = has_caves     and math_min(maxp.y - 1, PLASMA_BARRIER_BOTTOM_MIN - 1) or -1
-		local ast_y_min   = has_upper_ast and math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30) or 0
+		local ast_y_min   = has_upper_ast and math_max(minp.y + 1, UPPER_ASTEROID_MIN) or 0
 		local ast_y_max   = has_upper_ast and math_min(maxp.y - 1, UPPER_ASTEROID_MAX + 25) or -1
 		local ast_lower_top = UPPER_ASTEROID_MIN + 400
 
@@ -1673,7 +1668,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	-- Surface biome column generation (done after the main loop to avoid per-voxel biome dispatch)
 	if has_surface and #lazarus_space.bio_surface_biomes > 0 then
 		local surf_y_min = math_max(minp.y, SURFACE_BASE)
-		local surf_y_max = math_min(maxp.y, UPPER_ASTEROID_MIN - 31)
+		local surf_y_max = math_min(maxp.y, UPPER_ASTEROID_MIN - 1)
 
 		-- Pre-allocate reusable tables to avoid per-column allocation
 		local col_cave_shape = {}
@@ -1800,7 +1795,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		no_cleanup[c.keratin]            = true
 
 		local cleanup_min_y = math_max(minp.y, SURFACE_BASE)
-		local cleanup_max_y = math_min(maxp.y, UPPER_ASTEROID_MIN - 31)
+		local cleanup_max_y = math_min(maxp.y, UPPER_ASTEROID_MIN - 1)
 
 		-- Pass: remove isolated thin blocks and floating blocks
 		-- A block is "isolated thin" if air on both sides of any axis
