@@ -42,7 +42,7 @@ local PLASMA_BARRIER_BOTTOM_MIN = 27690  -- Lowest possible barrier bottom (2769
 
 local SURFACE_BASE          = 27775
 
-local UPPER_ASTEROID_MIN    = 27920
+local UPPER_ASTEROID_MIN    = 27935
 local UPPER_ASTEROID_MAX    = 28693
 
 local CEILING_CAVE_MIN      = 28793
@@ -677,9 +677,6 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						local az = cz * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
 						local radius = rng:next(3, 16)
 						local ice_ratio = rng:next(30, 70) / 100
-						local warp_x = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
-						local warp_y = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
-						local warp_z = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
 
 						-- Only place asteroid centers within the actual zone
 						if ay < FROZEN_ASTEROID_MIN or ay >= DEATH_SPACE_MIN then
@@ -687,7 +684,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						end
 
 						-- Only include if it could overlap this chunk
-						local extent = math.ceil(radius * 1.5)
+						local extent = radius + 4
 						if ax + extent >= minp.x and ax - extent <= maxp.x
 						and ay + extent >= minp.y and ay - extent <= maxp.y
 						and az + extent >= minp.z and az - extent <= maxp.z then
@@ -696,9 +693,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 								radius = radius,
 								radius_sq = radius * radius,
 								ice_ratio = ice_ratio,
-								warp_x = warp_x,
-								warp_y = warp_y,
-								warp_z = warp_z,
+								seed = rng:next(0, 2147483647),
 							}
 						end
 					::next_frozen_cell::
@@ -725,39 +720,62 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 
 					for fi = 1, #frozen_asteroids do
 						local fa = frozen_asteroids[fi]
-						local fdx = (x - fa.cx) * fa.warp_x
-						local fdy = (y - fa.cy) * fa.warp_y
-						local fdz = (z - fa.cz) * fa.warp_z
+						local fdx = x - fa.cx
+						local fdy = y - fa.cy
+						local fdz = z - fa.cz
 						local fdist_sq = fdx * fdx + fdy * fdy + fdz * fdz
 
-						if fdist_sq <= fa.radius_sq then
-							-- Additional per-block surface roughness
-							local deform = (pos_hash(x + 19283, y + 48271, z + 73619) % 1000) / 1000
-							local deformed_r_sq = fa.radius_sq * (0.78 + deform * 0.28)
-
-							if fdist_sq <= deformed_r_sq then
-								local frac = fdist_sq / deformed_r_sq
-								if frac > 0.49 then
-									-- Surface: ice/stone mix
-									local sh = pos_hash(x + 33721, y + 91283, z + 17539) % 100
-									if sh < fa.ice_ratio * 100 then
-										data[vi] = c.ice
-									else
-										data[vi] = c.stone
-									end
-								else
-									-- Core: mostly stone
-									local ch = pos_hash(x + 55129, y + 22817, z + 66491) % 100
-									if ch < 15 then
-										data[vi] = c.ice
-									else
-										data[vi] = c.stone
-									end
-								end
-								placed_frozen = true
-								break
-							end
+						-- Quick reject: skip if clearly outside max possible extent
+						local max_r = fa.radius + 4
+						if fdist_sq > max_r * max_r then
+							goto next_frozen_ast
 						end
+
+						local fdist = math_sqrt(fdist_sq)
+
+						-- Multi-octave noise displacement for craggy surface
+						-- Each octave uses a different offset from the asteroid's seed
+						local s = fa.seed
+						local n1 = ((pos_hash(x + s, y + s + 11111, z + s + 22222) % 1000) / 500 - 1) * 3.0
+						local n2 = ((pos_hash(x * 2 + s + 33333, y * 2 + s + 44444, z * 2 + s + 55555) % 1000) / 500 - 1) * 1.5
+						local n3 = ((pos_hash(x * 4 + s + 66666, y * 4 + s + 77777, z * 4 + s + 88888) % 1000) / 500 - 1) * 0.8
+						local displacement = n1 + n2 + n3  -- range roughly -5.3 to +5.3
+
+						-- Angular variation: different displacement in different directions
+						local ax_hash = ((pos_hash(
+							math_floor(fdx * 3 / math_max(fa.radius, 1)) + s + 99999,
+							math_floor(fdy * 3 / math_max(fa.radius, 1)) + s + 11122,
+							math_floor(fdz * 3 / math_max(fa.radius, 1)) + s + 33344
+						) % 1000) / 500 - 1) * 2.5
+						displacement = displacement + ax_hash
+
+						local effective_radius = fa.radius + displacement
+
+						if fdist <= effective_radius then
+							-- Surface vs core
+							local frac = fdist / math_max(effective_radius, 1)
+							if frac > 0.7 then
+								-- Outer 30%: ice/stone mix
+								local sh = pos_hash(x + 33721, y + 91283, z + 17539) % 100
+								if sh < fa.ice_ratio * 100 then
+									data[vi] = c.ice
+								else
+									data[vi] = c.stone
+								end
+							else
+								-- Core: mostly stone with ice veins
+								local ch = pos_hash(x + 55129, y + 22817, z + 66491) % 100
+								if ch < 15 then
+									data[vi] = c.ice
+								else
+									data[vi] = c.stone
+								end
+							end
+							placed_frozen = true
+							break
+						end
+
+						::next_frozen_ast::
 					end
 
 					if not placed_frozen then
