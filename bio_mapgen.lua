@@ -478,8 +478,8 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	local has_death     = (minp.y <= DEATH_SPACE_MAX and maxp.y >= DEATH_SPACE_MIN)
 	local has_caves     = (minp.y <= PLASMA_BARRIER_BOTTOM_MIN and maxp.y >= ORGANIC_CAVE_MIN)
 	local has_plasma   = (minp.y <= PLASMA_MAX and maxp.y >= PLASMA_BARRIER_BOTTOM_MIN)
-	local has_surface   = (maxp.y >= SURFACE_BASE and minp.y <= UPPER_ASTEROID_MIN - 100)
-	local has_upper_ast = (minp.y <= UPPER_ASTEROID_MAX + 25 and maxp.y >= UPPER_ASTEROID_MIN - 100)
+	local has_surface   = (maxp.y >= SURFACE_BASE and minp.y <= UPPER_ASTEROID_MIN - 30)
+	local has_upper_ast = (minp.y <= UPPER_ASTEROID_MAX + 25 and maxp.y >= UPPER_ASTEROID_MIN - 30)
 	local has_stalact   = (minp.y <= STALACTITE_MAX and maxp.y >= STALACTITE_MIN)
 	local has_ceil_cave = (minp.y <= CEILING_CAVE_MAX and maxp.y >= CEILING_CAVE_MIN)
 	local has_ceiling   = (minp.y <= CEILING_MEMBRANE_MAX and maxp.y > UPPER_ASTEROID_MAX + 25)
@@ -684,7 +684,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						end
 
 						-- Only include if it could overlap this chunk
-						local extent = radius + 4
+						local extent = math.ceil(radius * 1.5)
 						if ax + extent >= minp.x and ax - extent <= maxp.x
 						and ay + extent >= minp.y and ay - extent <= maxp.y
 						and az + extent >= minp.z and az - extent <= maxp.z then
@@ -725,37 +725,43 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						local fdz = z - fa.cz
 						local fdist_sq = fdx * fdx + fdy * fdy + fdz * fdz
 
-						-- Quick reject: skip if clearly outside max possible extent
-						local max_r = fa.radius + 4
+						-- Quick reject
+						local max_r = fa.radius + 6
 						if fdist_sq > max_r * max_r then
 							goto next_frozen_ast
 						end
 
 						local fdist = math_sqrt(fdist_sq)
+						local r = fa.radius
 
-						-- Multi-octave noise displacement for craggy surface
-						-- Each octave uses a different offset from the asteroid's seed
+						-- Smooth large-scale displacement using quantized direction
+						-- Divide space into angular sectors for gradual variation
 						local s = fa.seed
-						local n1 = ((pos_hash(x + s, y + s + 11111, z + s + 22222) % 1000) / 500 - 1) * 3.0
-						local n2 = ((pos_hash(x * 2 + s + 33333, y * 2 + s + 44444, z * 2 + s + 55555) % 1000) / 500 - 1) * 1.5
-						local n3 = ((pos_hash(x * 4 + s + 66666, y * 4 + s + 77777, z * 4 + s + 88888) % 1000) / 500 - 1) * 0.8
-						local displacement = n1 + n2 + n3  -- range roughly -5.3 to +5.3
+						local qx = math_floor(fdx * 2.5 / math_max(r, 1))
+						local qy = math_floor(fdy * 2.5 / math_max(r, 1))
+						local qz = math_floor(fdz * 2.5 / math_max(r, 1))
 
-						-- Angular variation: different displacement in different directions
-						local ax_hash = ((pos_hash(
-							math_floor(fdx * 3 / math_max(fa.radius, 1)) + s + 99999,
-							math_floor(fdy * 3 / math_max(fa.radius, 1)) + s + 11122,
-							math_floor(fdz * 3 / math_max(fa.radius, 1)) + s + 33344
-						) % 1000) / 500 - 1) * 2.5
-						displacement = displacement + ax_hash
+						-- Large bumps (smooth, ~4-6 sectors across diameter)
+						local d1 = ((pos_hash(qx + s, qy + s + 1111, qz + s + 2222) % 1000) / 500 - 1) * r * 0.25
 
-						local effective_radius = fa.radius + displacement
+						-- Medium bumps (rougher, ~8-10 sectors)
+						local qx2 = math_floor(fdx * 5 / math_max(r, 1))
+						local qy2 = math_floor(fdy * 5 / math_max(r, 1))
+						local qz2 = math_floor(fdz * 5 / math_max(r, 1))
+						local d2 = ((pos_hash(qx2 + s + 3333, qy2 + s + 4444, qz2 + s + 5555) % 1000) / 500 - 1) * r * 0.12
+
+						-- Small crags (fine detail, ~15-20 sectors)
+						local qx3 = math_floor(fdx * 10 / math_max(r, 1))
+						local qy3 = math_floor(fdy * 10 / math_max(r, 1))
+						local qz3 = math_floor(fdz * 10 / math_max(r, 1))
+						local d3 = ((pos_hash(qx3 + s + 6666, qy3 + s + 7777, qz3 + s + 8888) % 1000) / 500 - 1) * r * 0.06
+
+						local effective_radius = r + d1 + d2 + d3
 
 						if fdist <= effective_radius then
-							-- Surface vs core
 							local frac = fdist / math_max(effective_radius, 1)
 							if frac > 0.7 then
-								-- Outer 30%: ice/stone mix
+								-- Surface: ice/stone mix
 								local sh = pos_hash(x + 33721, y + 91283, z + 17539) % 100
 								if sh < fa.ice_ratio * 100 then
 									data[vi] = c.ice
@@ -1041,10 +1047,10 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						data[vi] = c.air
 					end
 
-				elseif y >= SURFACE_BASE and y < UPPER_ASTEROID_MIN - 100 and has_surface then
+				elseif y >= SURFACE_BASE and y < UPPER_ASTEROID_MIN - 30 and has_surface then
 					-- Surface Biome Zone - handled per-column below
 
-				elseif y >= UPPER_ASTEROID_MIN - 100 and y <= UPPER_ASTEROID_MAX + 25 and has_upper_ast then
+				elseif y >= UPPER_ASTEROID_MIN - 30 and y <= UPPER_ASTEROID_MAX + 25 and has_upper_ast then
 					-- Upper Asteroid Field
 					local noise_val = nbuf.asteroid_shape[ni3d]
 					local ph = pos_hash(x, y, z)
@@ -1452,7 +1458,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		-- Y-range boundaries for each zone
 		local cave_y_min  = has_caves     and math_max(minp.y + 1, ORGANIC_CAVE_MIN)       or 0
 		local cave_y_max  = has_caves     and math_min(maxp.y - 1, PLASMA_BARRIER_BOTTOM_MIN - 1) or -1
-		local ast_y_min   = has_upper_ast and math_max(minp.y + 1, UPPER_ASTEROID_MIN - 100) or 0
+		local ast_y_min   = has_upper_ast and math_max(minp.y + 1, UPPER_ASTEROID_MIN - 30) or 0
 		local ast_y_max   = has_upper_ast and math_min(maxp.y - 1, UPPER_ASTEROID_MAX + 25) or -1
 		local ast_lower_top = UPPER_ASTEROID_MIN + 400
 
@@ -1667,7 +1673,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	-- Surface biome column generation (done after the main loop to avoid per-voxel biome dispatch)
 	if has_surface and #lazarus_space.bio_surface_biomes > 0 then
 		local surf_y_min = math_max(minp.y, SURFACE_BASE)
-		local surf_y_max = math_min(maxp.y, UPPER_ASTEROID_MIN - 101)
+		local surf_y_max = math_min(maxp.y, UPPER_ASTEROID_MIN - 31)
 
 		-- Pre-allocate reusable tables to avoid per-column allocation
 		local col_cave_shape = {}
@@ -1794,7 +1800,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 		no_cleanup[c.keratin]            = true
 
 		local cleanup_min_y = math_max(minp.y, SURFACE_BASE)
-		local cleanup_max_y = math_min(maxp.y, UPPER_ASTEROID_MIN - 101)
+		local cleanup_max_y = math_min(maxp.y, UPPER_ASTEROID_MIN - 31)
 
 		-- Pass: remove isolated thin blocks and floating blocks
 		-- A block is "isolated thin" if air on both sides of any axis
