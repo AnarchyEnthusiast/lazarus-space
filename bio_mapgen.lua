@@ -42,7 +42,7 @@ local PLASMA_BARRIER_BOTTOM_MIN = 27690  -- Lowest possible barrier bottom (2769
 
 local SURFACE_BASE          = 27775
 
-local UPPER_ASTEROID_MIN    = 27904
+local UPPER_ASTEROID_MIN    = 27920
 local UPPER_ASTEROID_MAX    = 28693
 
 local CEILING_CAVE_MIN      = 28793
@@ -381,6 +381,54 @@ local function get_hollow_asteroids_near(px, py, pz)
 end
 
 -- =============================================================================
+-- Frozen Asteroid System (individual ice/stone asteroids)
+-- =============================================================================
+
+local FROZEN_CELL_SIZE = 40
+local FROZEN_SEED = 57231
+
+local function get_frozen_asteroid(cell_x, cell_y, cell_z)
+	local hash = pos_hash(cell_x + FROZEN_SEED, cell_y + FROZEN_SEED, cell_z + FROZEN_SEED)
+	local rng = PcgRandom(hash)
+
+	-- 1 in 3 chance per cell
+	if rng:next(1, 3) ~= 1 then
+		return nil
+	end
+
+	local margin = 5
+	local cx = cell_x * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+	local cy = cell_y * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+	local cz = cell_z * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+	local radius = rng:next(3, 16)
+	local ice_ratio = rng:next(30, 70) / 100  -- 30-70% ice coverage
+
+	return {
+		cx = cx, cy = cy, cz = cz,
+		radius = radius,
+		ice_ratio = ice_ratio,
+	}
+end
+
+local function get_frozen_asteroids_near(px, py, pz)
+	local gcx = math_floor(px / FROZEN_CELL_SIZE)
+	local gcy = math_floor(py / FROZEN_CELL_SIZE)
+	local gcz = math_floor(pz / FROZEN_CELL_SIZE)
+	local result = {}
+	for dx = -1, 1 do
+		for dy = -1, 1 do
+			for dz = -1, 1 do
+				local ast = get_frozen_asteroid(gcx + dx, gcy + dy, gcz + dz)
+				if ast then
+					result[#result + 1] = ast
+				end
+			end
+		end
+	end
+	return result
+end
+
+-- =============================================================================
 -- Giant Stalactite System (hanging from cave cap bottom surface)
 -- =============================================================================
 
@@ -659,25 +707,48 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 				if y < BIO_MIN or y > BIO_MAX then
 					-- do nothing
 				elseif y >= FROZEN_ASTEROID_MIN and y < DEATH_SPACE_MIN and has_frozen then
-					-- Frozen Asteroid Field (default:stone + default:ice)
-					-- Rough bottom edge: ±30 block displacement via multi-octave pseudo-noise
-					local fb1 = ((pos_hash_2d(math_floor(x / 12), math_floor(z / 12), 33891) % 1000) / 500 - 1) * 13
-					local fb2 = ((pos_hash_2d(math_floor(x / 6), math_floor(z / 6), 44892) % 1000) / 500 - 1) * 9.8
-					local fb3 = ((pos_hash_2d(math_floor(x / 3), math_floor(z / 3), 55893) % 1000) / 500 - 1) * 5.5
-					local fb4 = ((pos_hash_2d(math_floor(x / 2), math_floor(z / 2), 66894) % 1000) / 500 - 1) * 3.5
-					local frozen_bottom = FROZEN_ASTEROID_MIN + fb1 + fb2 + fb3 + fb4
+					-- Frozen Asteroid Field: individual ice/stone asteroids
+					local frozen_list = get_frozen_asteroids_near(x, y, z)
+					local placed_frozen = false
 
-					if y < frozen_bottom then
-						data[vi] = c.air
-					else
-						local noise_val = nbuf.asteroid_shape[ni3d]
-						if noise_val > 0.4 then
-							data[vi] = c.stone
-						elseif noise_val > 0.35 then
-							data[vi] = c.ice
-						else
-							data[vi] = c.air
+					for _, fa in ipairs(frozen_list) do
+						local fdx = x - fa.cx
+						local fdy = y - fa.cy
+						local fdz = z - fa.cz
+						local fdist_sq = fdx * fdx + fdy * fdy + fdz * fdz
+
+						-- Deform the sphere slightly using position hash
+						local deform = (pos_hash(x + 19283, y + 48271, z + 73619) % 1000) / 1000
+						local deformed_radius = fa.radius * (0.85 + deform * 0.3)
+						local r_sq = deformed_radius * deformed_radius
+
+						if fdist_sq <= r_sq then
+							-- Surface vs core: outer 30% is surface
+							local frac = fdist_sq / r_sq
+							if frac > 0.49 then
+								-- Surface layer: mix of ice and stone
+								local surface_hash = pos_hash(x + 33721, y + 91283, z + 17539) % 100
+								if surface_hash < fa.ice_ratio * 100 then
+									data[vi] = c.ice
+								else
+									data[vi] = c.stone
+								end
+							else
+								-- Core: mostly stone with some ice veins
+								local core_hash = pos_hash(x + 55129, y + 22817, z + 66491) % 100
+								if core_hash < 15 then
+									data[vi] = c.ice
+								else
+									data[vi] = c.stone
+								end
+							end
+							placed_frozen = true
+							break
 						end
+					end
+
+					if not placed_frozen then
+						data[vi] = c.air
 					end
 
 				elseif y >= DEATH_SPACE_MIN and y < DEATH_SPACE_MAX and has_death then
