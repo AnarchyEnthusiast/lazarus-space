@@ -1,5 +1,5 @@
 -- Biological Dimension: Mapgen Framework
--- Main terrain generation for y=26890 to y=29200.
+-- Main terrain generation for y=26865 to y=29200.
 -- Handles noise system, non-biome layers, cave biomes, upper asteroids,
 -- and dispatches modular surface biomes from biomes/ subdirectory.
 
@@ -20,7 +20,7 @@ local math_min    = math.min
 -- Layer Boundary Constants
 -- =============================================================================
 
-local BIO_MIN               = 26890
+local BIO_MIN               = 26865
 local BIO_MAX               = 29200
 
 local FROZEN_ASTEROID_MIN   = 26890
@@ -474,7 +474,7 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	local ylen = maxp.y - minp.y + 1
 
 	-- Determine which layers overlap this chunk
-	local has_frozen    = (minp.y <= FROZEN_ASTEROID_MAX and maxp.y >= FROZEN_ASTEROID_MIN)
+	local has_frozen    = (minp.y <= FROZEN_ASTEROID_MAX and maxp.y >= FROZEN_ASTEROID_MIN - 25)
 	local has_death     = (minp.y <= DEATH_SPACE_MAX and maxp.y >= DEATH_SPACE_MIN)
 	local has_caves     = (minp.y <= PLASMA_BARRIER_BOTTOM_MIN and maxp.y >= ORGANIC_CAVE_MIN)
 	local has_plasma   = (minp.y <= PLASMA_MAX and maxp.y >= PLASMA_BARRIER_BOTTOM_MIN)
@@ -677,18 +677,31 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 						local az = cz * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
 						local radius = rng:next(3, 16)
 						local ice_ratio = rng:next(30, 70) / 100
+						local warp_x = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
+						local warp_y = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
+						local warp_z = 0.7 + (rng:next(0, 60) / 100)  -- 0.7 to 1.3
+
+						-- Only place asteroid centers within the actual zone
+						if ay < FROZEN_ASTEROID_MIN or ay >= DEATH_SPACE_MIN then
+							goto next_frozen_cell
+						end
 
 						-- Only include if it could overlap this chunk
-						if ax + radius >= minp.x and ax - radius <= maxp.x
-						and ay + radius >= minp.y and ay - radius <= maxp.y
-						and az + radius >= minp.z and az - radius <= maxp.z then
+						local extent = math.ceil(radius * 1.5)
+						if ax + extent >= minp.x and ax - extent <= maxp.x
+						and ay + extent >= minp.y and ay - extent <= maxp.y
+						and az + extent >= minp.z and az - extent <= maxp.z then
 							frozen_asteroids[#frozen_asteroids + 1] = {
 								cx = ax, cy = ay, cz = az,
 								radius = radius,
 								radius_sq = radius * radius,
 								ice_ratio = ice_ratio,
+								warp_x = warp_x,
+								warp_y = warp_y,
+								warp_z = warp_z,
 							}
 						end
+					::next_frozen_cell::
 					end
 				end
 			end
@@ -706,21 +719,21 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 				-- Skip positions outside biological dimension
 				if y < BIO_MIN or y > BIO_MAX then
 					-- do nothing
-				elseif y >= FROZEN_ASTEROID_MIN and y < DEATH_SPACE_MIN and has_frozen then
+				elseif y >= FROZEN_ASTEROID_MIN - 25 and y < DEATH_SPACE_MIN and has_frozen then
 					-- Frozen Asteroid Field: individual ice/stone asteroids
 					local placed_frozen = false
 
 					for fi = 1, #frozen_asteroids do
 						local fa = frozen_asteroids[fi]
-						local fdx = x - fa.cx
-						local fdy = y - fa.cy
-						local fdz = z - fa.cz
+						local fdx = (x - fa.cx) * fa.warp_x
+						local fdy = (y - fa.cy) * fa.warp_y
+						local fdz = (z - fa.cz) * fa.warp_z
 						local fdist_sq = fdx * fdx + fdy * fdy + fdz * fdz
 
 						if fdist_sq <= fa.radius_sq then
-							-- Deform slightly using position hash
+							-- Additional per-block surface roughness
 							local deform = (pos_hash(x + 19283, y + 48271, z + 73619) % 1000) / 1000
-							local deformed_r_sq = fa.radius_sq * (0.72 + deform * 0.36)
+							local deformed_r_sq = fa.radius_sq * (0.78 + deform * 0.28)
 
 							if fdist_sq <= deformed_r_sq then
 								local frac = fdist_sq / deformed_r_sq
