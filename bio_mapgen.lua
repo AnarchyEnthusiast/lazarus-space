@@ -381,52 +381,11 @@ local function get_hollow_asteroids_near(px, py, pz)
 end
 
 -- =============================================================================
--- Frozen Asteroid System (individual ice/stone asteroids)
+-- Frozen Asteroid System constants (generation done per-chunk in mapgen callback)
 -- =============================================================================
 
 local FROZEN_CELL_SIZE = 40
 local FROZEN_SEED = 57231
-
-local function get_frozen_asteroid(cell_x, cell_y, cell_z)
-	local hash = pos_hash(cell_x + FROZEN_SEED, cell_y + FROZEN_SEED, cell_z + FROZEN_SEED)
-	local rng = PcgRandom(hash)
-
-	-- 1 in 3 chance per cell
-	if rng:next(1, 3) ~= 1 then
-		return nil
-	end
-
-	local margin = 5
-	local cx = cell_x * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
-	local cy = cell_y * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
-	local cz = cell_z * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
-	local radius = rng:next(3, 16)
-	local ice_ratio = rng:next(30, 70) / 100  -- 30-70% ice coverage
-
-	return {
-		cx = cx, cy = cy, cz = cz,
-		radius = radius,
-		ice_ratio = ice_ratio,
-	}
-end
-
-local function get_frozen_asteroids_near(px, py, pz)
-	local gcx = math_floor(px / FROZEN_CELL_SIZE)
-	local gcy = math_floor(py / FROZEN_CELL_SIZE)
-	local gcz = math_floor(pz / FROZEN_CELL_SIZE)
-	local result = {}
-	for dx = -1, 1 do
-		for dy = -1, 1 do
-			for dz = -1, 1 do
-				local ast = get_frozen_asteroid(gcx + dx, gcy + dy, gcz + dz)
-				if ast then
-					result[#result + 1] = ast
-				end
-			end
-		end
-	end
-	return result
-end
 
 -- =============================================================================
 -- Giant Stalactite System (hanging from cave cap bottom surface)
@@ -695,6 +654,47 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 	local marrow_source_count = 0
 	local LIQUID_CAP = 3
 
+	-- Pre-compute frozen asteroids that overlap this chunk (once per mapgen call)
+	local frozen_asteroids = {}
+	if has_frozen then
+		local cell_min_x = math_floor((minp.x - 16) / FROZEN_CELL_SIZE) - 1
+		local cell_max_x = math_floor((maxp.x + 16) / FROZEN_CELL_SIZE) + 1
+		local cell_min_y = math_floor((math_max(minp.y, FROZEN_ASTEROID_MIN) - 16) / FROZEN_CELL_SIZE) - 1
+		local cell_max_y = math_floor((math_min(maxp.y, DEATH_SPACE_MIN) + 16) / FROZEN_CELL_SIZE) + 1
+		local cell_min_z = math_floor((minp.z - 16) / FROZEN_CELL_SIZE) - 1
+		local cell_max_z = math_floor((maxp.z + 16) / FROZEN_CELL_SIZE) + 1
+
+		for cx = cell_min_x, cell_max_x do
+			for cy = cell_min_y, cell_max_y do
+				for cz = cell_min_z, cell_max_z do
+					local hash = lazarus_space.pos_hash(cx + FROZEN_SEED, cy + FROZEN_SEED, cz + FROZEN_SEED)
+					local rng = PcgRandom(hash)
+
+					if rng:next(1, 3) == 1 then
+						local margin = 5
+						local ax = cx * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+						local ay = cy * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+						local az = cz * FROZEN_CELL_SIZE + rng:next(margin, FROZEN_CELL_SIZE - margin)
+						local radius = rng:next(3, 16)
+						local ice_ratio = rng:next(30, 70) / 100
+
+						-- Only include if it could overlap this chunk
+						if ax + radius >= minp.x and ax - radius <= maxp.x
+						and ay + radius >= minp.y and ay - radius <= maxp.y
+						and az + radius >= minp.z and az - radius <= maxp.z then
+							frozen_asteroids[#frozen_asteroids + 1] = {
+								cx = ax, cy = ay, cz = az,
+								radius = radius,
+								radius_sq = radius * radius,
+								ice_ratio = ice_ratio,
+							}
+						end
+					end
+				end
+			end
+		end
+	end
+
 	-- Main generation loop: z-y-x order (x innermost)
 	local ni3d = 0
 	for z = minp.z, maxp.z do
@@ -708,42 +708,42 @@ minetest.register_on_generated(function(minp, maxp, blockseed)
 					-- do nothing
 				elseif y >= FROZEN_ASTEROID_MIN and y < DEATH_SPACE_MIN and has_frozen then
 					-- Frozen Asteroid Field: individual ice/stone asteroids
-					local frozen_list = get_frozen_asteroids_near(x, y, z)
 					local placed_frozen = false
 
-					for _, fa in ipairs(frozen_list) do
+					for fi = 1, #frozen_asteroids do
+						local fa = frozen_asteroids[fi]
 						local fdx = x - fa.cx
 						local fdy = y - fa.cy
 						local fdz = z - fa.cz
 						local fdist_sq = fdx * fdx + fdy * fdy + fdz * fdz
 
-						-- Deform the sphere slightly using position hash
-						local deform = (pos_hash(x + 19283, y + 48271, z + 73619) % 1000) / 1000
-						local deformed_radius = fa.radius * (0.85 + deform * 0.3)
-						local r_sq = deformed_radius * deformed_radius
+						if fdist_sq <= fa.radius_sq then
+							-- Deform slightly using position hash
+							local deform = (pos_hash(x + 19283, y + 48271, z + 73619) % 1000) / 1000
+							local deformed_r_sq = fa.radius_sq * (0.72 + deform * 0.36)
 
-						if fdist_sq <= r_sq then
-							-- Surface vs core: outer 30% is surface
-							local frac = fdist_sq / r_sq
-							if frac > 0.49 then
-								-- Surface layer: mix of ice and stone
-								local surface_hash = pos_hash(x + 33721, y + 91283, z + 17539) % 100
-								if surface_hash < fa.ice_ratio * 100 then
-									data[vi] = c.ice
+							if fdist_sq <= deformed_r_sq then
+								local frac = fdist_sq / deformed_r_sq
+								if frac > 0.49 then
+									-- Surface: ice/stone mix
+									local sh = pos_hash(x + 33721, y + 91283, z + 17539) % 100
+									if sh < fa.ice_ratio * 100 then
+										data[vi] = c.ice
+									else
+										data[vi] = c.stone
+									end
 								else
-									data[vi] = c.stone
+									-- Core: mostly stone
+									local ch = pos_hash(x + 55129, y + 22817, z + 66491) % 100
+									if ch < 15 then
+										data[vi] = c.ice
+									else
+										data[vi] = c.stone
+									end
 								end
-							else
-								-- Core: mostly stone with some ice veins
-								local core_hash = pos_hash(x + 55129, y + 22817, z + 66491) % 100
-								if core_hash < 15 then
-									data[vi] = c.ice
-								else
-									data[vi] = c.stone
-								end
+								placed_frozen = true
+								break
 							end
-							placed_frozen = true
-							break
 						end
 					end
 
